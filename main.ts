@@ -749,43 +749,65 @@ class MondayView extends ItemView {
 
         // Status filter checkboxes
         if (statuses.size > 0) {
-            const statusSection = container.createEl('div', { cls: 'monday-filter-section' });
+            const statusSection = container.createEl('div', { cls: 'monday-filter-section collapsed' });
 
-            // Header with mode toggle
+            // Header (clickable to expand/collapse)
             const statusHeader = statusSection.createEl('div', { cls: 'monday-filter-header' });
-            statusHeader.createEl('span', { text: 'Status', cls: 'monday-filter-title' });
 
-            const statusModeBtn = statusHeader.createEl('button', {
+            const statusTitleArea = statusHeader.createEl('div', { cls: 'monday-filter-title-area' });
+            statusTitleArea.createEl('span', { cls: 'monday-filter-chevron', text: '▶' });
+            statusTitleArea.createEl('span', { text: 'Status', cls: 'monday-filter-title' });
+
+            // Show count when collapsed
+            const statusCount = statusTitleArea.createEl('span', { cls: 'monday-filter-count' });
+            const updateStatusCount = () => {
+                const count = this.statusFilter.selected.size;
+                statusCount.textContent = count > 0 ? `(${count} ${this.statusFilter.mode === 'exclude' ? 'hidden' : 'selected'})` : '';
+            };
+            updateStatusCount();
+
+            statusTitleArea.addEventListener('click', () => {
+                statusSection.classList.toggle('collapsed');
+            });
+
+            const statusControls = statusHeader.createEl('div', { cls: 'monday-filter-controls' });
+
+            const statusModeBtn = statusControls.createEl('button', {
                 cls: `monday-filter-mode ${this.statusFilter.mode}`,
                 text: this.statusFilter.mode === 'include' ? 'Show' : 'Hide'
             });
             statusModeBtn.title = this.statusFilter.mode === 'include'
                 ? 'Show only selected (click to switch to Hide mode)'
                 : 'Hide selected (click to switch to Show mode)';
-            statusModeBtn.addEventListener('click', () => {
+            statusModeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
                 this.statusFilter.mode = this.statusFilter.mode === 'include' ? 'exclude' : 'include';
                 statusModeBtn.textContent = this.statusFilter.mode === 'include' ? 'Show' : 'Hide';
                 statusModeBtn.className = `monday-filter-mode ${this.statusFilter.mode}`;
                 statusModeBtn.title = this.statusFilter.mode === 'include'
                     ? 'Show only selected (click to switch to Hide mode)'
                     : 'Hide selected (click to switch to Show mode)';
+                updateStatusCount();
                 refreshItems();
             });
 
             // Clear button
-            const statusClearBtn = statusHeader.createEl('button', {
+            const statusClearBtn = statusControls.createEl('button', {
                 cls: 'monday-filter-clear',
-                text: 'Clear'
+                text: '✕'
             });
-            statusClearBtn.addEventListener('click', () => {
+            statusClearBtn.title = 'Clear all';
+            statusClearBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
                 this.statusFilter.selected.clear();
                 statusSection.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
                     (cb as HTMLInputElement).checked = false;
                 });
+                updateStatusCount();
                 refreshItems();
             });
 
-            // Checkbox list
+            // Checkbox list (collapsible)
             const statusList = statusSection.createEl('div', { cls: 'monday-filter-list' });
             for (const status of Array.from(statuses).sort()) {
                 const label = statusList.createEl('label', { cls: 'monday-filter-checkbox' });
@@ -797,6 +819,7 @@ class MondayView extends ItemView {
                     } else {
                         this.statusFilter.selected.delete(status);
                     }
+                    updateStatusCount();
                     refreshItems();
                 });
                 label.createEl('span', { text: status });
@@ -805,43 +828,65 @@ class MondayView extends ItemView {
 
         // Group filter checkboxes
         if (groups.size > 0) {
-            const groupSection = container.createEl('div', { cls: 'monday-filter-section' });
+            const groupSection = container.createEl('div', { cls: 'monday-filter-section collapsed' });
 
-            // Header with mode toggle
+            // Header (clickable to expand/collapse)
             const groupHeader = groupSection.createEl('div', { cls: 'monday-filter-header' });
-            groupHeader.createEl('span', { text: 'Group', cls: 'monday-filter-title' });
 
-            const groupModeBtn = groupHeader.createEl('button', {
+            const groupTitleArea = groupHeader.createEl('div', { cls: 'monday-filter-title-area' });
+            groupTitleArea.createEl('span', { cls: 'monday-filter-chevron', text: '▶' });
+            groupTitleArea.createEl('span', { text: 'Group', cls: 'monday-filter-title' });
+
+            // Show count when collapsed
+            const groupCount = groupTitleArea.createEl('span', { cls: 'monday-filter-count' });
+            const updateGroupCount = () => {
+                const count = this.groupFilter.selected.size;
+                groupCount.textContent = count > 0 ? `(${count} ${this.groupFilter.mode === 'exclude' ? 'hidden' : 'selected'})` : '';
+            };
+            updateGroupCount();
+
+            groupTitleArea.addEventListener('click', () => {
+                groupSection.classList.toggle('collapsed');
+            });
+
+            const groupControls = groupHeader.createEl('div', { cls: 'monday-filter-controls' });
+
+            const groupModeBtn = groupControls.createEl('button', {
                 cls: `monday-filter-mode ${this.groupFilter.mode}`,
                 text: this.groupFilter.mode === 'include' ? 'Show' : 'Hide'
             });
             groupModeBtn.title = this.groupFilter.mode === 'include'
                 ? 'Show only selected (click to switch to Hide mode)'
                 : 'Hide selected (click to switch to Show mode)';
-            groupModeBtn.addEventListener('click', () => {
+            groupModeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
                 this.groupFilter.mode = this.groupFilter.mode === 'include' ? 'exclude' : 'include';
                 groupModeBtn.textContent = this.groupFilter.mode === 'include' ? 'Show' : 'Hide';
                 groupModeBtn.className = `monday-filter-mode ${this.groupFilter.mode}`;
                 groupModeBtn.title = this.groupFilter.mode === 'include'
                     ? 'Show only selected (click to switch to Hide mode)'
                     : 'Hide selected (click to switch to Show mode)';
+                updateGroupCount();
                 refreshItems();
             });
 
             // Clear button
-            const groupClearBtn = groupHeader.createEl('button', {
+            const groupClearBtn = groupControls.createEl('button', {
                 cls: 'monday-filter-clear',
-                text: 'Clear'
+                text: '✕'
             });
-            groupClearBtn.addEventListener('click', () => {
+            groupClearBtn.title = 'Clear all';
+            groupClearBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
                 this.groupFilter.selected.clear();
                 groupSection.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
                     (cb as HTMLInputElement).checked = false;
                 });
+                updateGroupCount();
                 refreshItems();
             });
 
-            // Checkbox list
+            // Checkbox list (collapsible)
             const groupList = groupSection.createEl('div', { cls: 'monday-filter-list' });
             for (const group of Array.from(groups).sort()) {
                 const label = groupList.createEl('label', { cls: 'monday-filter-checkbox' });
@@ -853,6 +898,7 @@ class MondayView extends ItemView {
                     } else {
                         this.groupFilter.selected.delete(group);
                     }
+                    updateGroupCount();
                     refreshItems();
                 });
                 label.createEl('span', { text: group });

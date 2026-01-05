@@ -511,28 +511,60 @@
 .monday-filter-section {
     background: var(--background-secondary);
     border-radius: 6px;
-    padding: 0.5em;
+    padding: 0.4em 0.5em;
 }
 
 .monday-filter-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.5em;
-    margin-bottom: 0.5em;
-    padding-bottom: 0.4em;
-    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.monday-filter-title-area {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    cursor: pointer;
+    flex: 1;
+    padding: 0.2em 0;
+}
+
+.monday-filter-title-area:hover {
+    opacity: 0.8;
+}
+
+.monday-filter-chevron {
+    font-size: 0.7em;
+    color: var(--text-muted);
+    transition: transform 0.15s ease;
+}
+
+.monday-filter-section:not(.collapsed) .monday-filter-chevron {
+    transform: rotate(90deg);
 }
 
 .monday-filter-title {
     font-weight: 600;
     font-size: 0.85em;
     color: var(--text-normal);
-    flex: 1;
+}
+
+.monday-filter-count {
+    font-size: 0.75em;
+    color: var(--text-muted);
+    font-weight: normal;
+}
+
+.monday-filter-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.3em;
 }
 
 .monday-filter-mode {
-    font-size: 0.7em;
-    padding: 0.2em 0.5em;
+    font-size: 0.65em;
+    padding: 0.15em 0.4em;
     border-radius: 3px;
     border: none;
     cursor: pointer;
@@ -551,12 +583,13 @@
 
 .monday-filter-clear {
     font-size: 0.7em;
-    padding: 0.2em 0.4em;
+    padding: 0.1em 0.35em;
     border-radius: 3px;
     border: 1px solid var(--background-modifier-border);
     background: var(--background-primary);
     color: var(--text-muted);
     cursor: pointer;
+    line-height: 1;
 }
 
 .monday-filter-clear:hover {
@@ -567,19 +600,27 @@
 .monday-filter-list {
     display: flex;
     flex-direction: column;
-    gap: 0.3em;
+    gap: 0.2em;
     max-height: 150px;
     overflow-y: auto;
+    margin-top: 0.5em;
+    padding-top: 0.4em;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+/* Collapsed state - hide the list */
+.monday-filter-section.collapsed .monday-filter-list {
+    display: none;
 }
 
 .monday-filter-checkbox {
     display: flex;
     align-items: center;
     gap: 0.5em;
-    padding: 0.25em 0.3em;
+    padding: 0.2em 0.3em;
     border-radius: 3px;
     cursor: pointer;
-    font-size: 0.85em;
+    font-size: 0.8em;
     color: var(--text-normal);
 }
 
