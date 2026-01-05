@@ -424,6 +424,9 @@ var MondayView = class extends import_obsidian.ItemView {
     return "calendar-check";
   }
   async onOpen() {
+    if (!this.selectedBoardId && this.plugin.settings.defaultBoardId) {
+      this.selectedBoardId = this.plugin.settings.defaultBoardId;
+    }
     await this.render();
   }
   async render() {

@@ -594,6 +594,10 @@ class MondayView extends ItemView {
     }
 
     async onOpen() {
+        // Use default board if set and no board currently selected
+        if (!this.selectedBoardId && this.plugin.settings.defaultBoardId) {
+            this.selectedBoardId = this.plugin.settings.defaultBoardId;
+        }
         await this.render();
     }
 
