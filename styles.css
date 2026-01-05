@@ -1,0 +1,496 @@
+/* ============================================================================
+   Monday.com Integration Plugin - Styles
+   ============================================================================ */
+
+/* ----------------------------------------------------------------------------
+   Dashboard (Code Block) Styles
+   ---------------------------------------------------------------------------- */
+
+.monday-dashboard {
+    background: var(--background-secondary);
+    border-radius: 8px;
+    padding: 1em;
+    margin: 1em 0;
+}
+
+.monday-board-title {
+    font-size: 1.2em;
+    font-weight: 600;
+    margin-bottom: 0.5em;
+    color: var(--text-normal);
+}
+
+.monday-header-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 0.5em;
+    margin-bottom: 1em;
+}
+
+.monday-style-badge {
+    font-size: 0.7em;
+    text-transform: uppercase;
+    padding: 0.2em 0.5em;
+    background: var(--background-modifier-border);
+    border-radius: 3px;
+    color: var(--text-muted);
+}
+
+.monday-refresh-btn {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    padding: 0.3em 0.8em;
+    cursor: pointer;
+    font-size: 0.85em;
+}
+
+.monday-refresh-btn:hover {
+    background: var(--interactive-accent-hover);
+}
+
+/* Items Grid */
+.monday-items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+}
+
+.monday-item-card {
+    background: var(--background-primary);
+    border-radius: 6px;
+    padding: 0.8em;
+    border-left: 4px solid var(--interactive-accent);
+    transition: box-shadow 0.2s ease;
+}
+
+.monday-item-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.monday-item-name {
+    font-weight: 500;
+    margin-bottom: 0.4em;
+    color: var(--text-normal);
+}
+
+.monday-group-badge {
+    display: inline-block;
+    font-size: 0.75em;
+    padding: 0.15em 0.5em;
+    border-radius: 3px;
+    color: white;
+    margin-left: 0.5em;
+    vertical-align: middle;
+}
+
+.monday-item-columns {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5em;
+    margin-top: 0.5em;
+}
+
+.monday-column-value {
+    font-size: 0.85em;
+    color: var(--text-muted);
+}
+
+.monday-column-label {
+    color: var(--text-faint);
+}
+
+.monday-column-text {
+    color: var(--text-normal);
+}
+
+.monday-status-badge {
+    display: inline-block;
+    font-size: 0.8em;
+    padding: 0.15em 0.5em;
+    border-radius: 3px;
+    color: white;
+    background: #579bfc;
+}
+
+.monday-item-count {
+    text-align: right;
+    font-size: 0.8em;
+    color: var(--text-muted);
+    margin-top: 1em;
+    padding-top: 0.5em;
+    border-top: 1px solid var(--background-modifier-border);
+}
+
+/* ----------------------------------------------------------------------------
+   Table Style
+   ---------------------------------------------------------------------------- */
+
+.monday-table-container {
+    overflow-x: auto;
+    margin: 0.5em 0;
+}
+
+.monday-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9em;
+}
+
+.monday-table thead {
+    background: var(--background-primary-alt);
+}
+
+.monday-table th {
+    text-align: left;
+    padding: 0.6em 0.8em;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 2px solid var(--background-modifier-border);
+    white-space: nowrap;
+}
+
+.monday-table td {
+    padding: 0.5em 0.8em;
+    border-bottom: 1px solid var(--background-modifier-border);
+    vertical-align: middle;
+}
+
+.monday-table tbody tr:hover {
+    background: var(--background-modifier-hover);
+}
+
+.monday-table-item-name {
+    font-weight: 500;
+    color: var(--text-normal);
+}
+
+.monday-group-badge-small {
+    font-size: 0.7em;
+    padding: 0.1em 0.4em;
+    margin-left: 0;
+}
+
+/* ----------------------------------------------------------------------------
+   Compact Style
+   ---------------------------------------------------------------------------- */
+
+.monday-items-compact {
+    gap: 0.3em;
+}
+
+.monday-compact-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    padding: 0.4em 0.6em;
+    background: var(--background-primary);
+    border-radius: 4px;
+    border-left: 3px solid var(--interactive-accent);
+}
+
+.monday-compact-item:hover {
+    background: var(--background-modifier-hover);
+}
+
+.monday-compact-name {
+    flex: 1;
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.monday-compact-item .monday-status-badge {
+    font-size: 0.75em;
+    padding: 0.1em 0.4em;
+}
+
+.monday-compact-item .monday-group-badge {
+    margin-left: auto;
+    font-size: 0.65em;
+}
+
+/* Loading State */
+.monday-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 2em;
+    color: var(--text-muted);
+}
+
+.monday-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--background-modifier-border);
+    border-top-color: var(--interactive-accent);
+    border-radius: 50%;
+    animation: monday-spin 1s linear infinite;
+    margin-bottom: 0.5em;
+}
+
+@keyframes monday-spin {
+    to { transform: rotate(360deg); }
+}
+
+.monday-loading-text {
+    font-size: 0.9em;
+}
+
+/* Error State */
+.monday-error {
+    background: var(--background-modifier-error);
+    color: var(--text-error);
+    padding: 1em;
+    border-radius: 6px;
+    text-align: center;
+}
+
+/* Empty State */
+.monday-empty {
+    text-align: center;
+    padding: 2em;
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* ----------------------------------------------------------------------------
+   Sidebar View Styles
+   ---------------------------------------------------------------------------- */
+
+.monday-sidebar {
+    padding: 0.5em;
+}
+
+.monday-sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1em;
+    padding-bottom: 0.5em;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.monday-sidebar-header h4 {
+    margin: 0;
+    color: var(--text-normal);
+}
+
+.monday-sidebar-refresh {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1.2em;
+    color: var(--text-muted);
+    padding: 0.2em;
+    border-radius: 4px;
+}
+
+.monday-sidebar-refresh:hover {
+    background: var(--background-modifier-hover);
+    color: var(--text-normal);
+}
+
+.monday-board-selector {
+    margin-bottom: 1em;
+}
+
+.monday-board-select {
+    width: 100%;
+    padding: 0.5em;
+    border-radius: 4px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-normal);
+}
+
+.monday-sidebar-items {
+    margin-top: 1em;
+}
+
+.monday-sidebar-group {
+    margin-bottom: 1em;
+}
+
+.monday-sidebar-group-title {
+    font-weight: 600;
+    font-size: 0.9em;
+    color: var(--text-muted);
+    margin-bottom: 0.5em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.monday-sidebar-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4em 0.5em;
+    border-radius: 4px;
+    margin-bottom: 0.2em;
+}
+
+.monday-sidebar-item:hover {
+    background: var(--background-modifier-hover);
+}
+
+.monday-sidebar-item-name {
+    flex: 1;
+    font-size: 0.9em;
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.monday-sidebar-status {
+    font-size: 0.75em;
+    padding: 0.15em 0.5em;
+    border-radius: 3px;
+    color: white;
+    background: #579bfc;
+    margin-left: 0.5em;
+    flex-shrink: 0;
+}
+
+.monday-sidebar-error {
+    padding: 1em;
+    text-align: center;
+}
+
+.monday-sidebar-error p {
+    color: var(--text-muted);
+    margin-bottom: 1em;
+}
+
+.monday-sidebar-error button {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+    border: none;
+    border-radius: 4px;
+    padding: 0.5em 1em;
+    cursor: pointer;
+}
+
+.monday-sidebar-hint {
+    color: var(--text-muted);
+    font-style: italic;
+    text-align: center;
+    padding: 1em;
+}
+
+.monday-sidebar-loading {
+    text-align: center;
+    padding: 1em;
+    color: var(--text-muted);
+}
+
+/* ----------------------------------------------------------------------------
+   Status Bar Styles
+   ---------------------------------------------------------------------------- */
+
+.monday-status-bar {
+    cursor: pointer;
+    padding: 0 0.5em;
+}
+
+.monday-status-bar:hover {
+    background: var(--background-modifier-hover);
+}
+
+/* ----------------------------------------------------------------------------
+   Settings Page Styles
+   ---------------------------------------------------------------------------- */
+
+.monday-usage {
+    background: var(--background-secondary);
+    padding: 1em;
+    border-radius: 6px;
+    margin-bottom: 1em;
+}
+
+.monday-usage p {
+    margin: 0.5em 0;
+}
+
+.monday-usage pre {
+    background: var(--background-primary);
+    padding: 0.8em;
+    border-radius: 4px;
+    overflow-x: auto;
+}
+
+.monday-usage ul {
+    margin: 0.5em 0;
+    padding-left: 1.5em;
+}
+
+.monday-usage li {
+    margin: 0.3em 0;
+    color: var(--text-muted);
+}
+
+.monday-support {
+    text-align: center;
+    padding: 1em;
+}
+
+.monday-support p {
+    margin-bottom: 1em;
+}
+
+.monday-coffee-link {
+    display: inline-block;
+}
+
+.monday-coffee-button {
+    transition: transform 0.2s ease;
+}
+
+.monday-coffee-button:hover {
+    transform: scale(1.05);
+}
+
+/* ----------------------------------------------------------------------------
+   Dark Theme Adjustments
+   ---------------------------------------------------------------------------- */
+
+.theme-dark .monday-item-card {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.theme-dark .monday-item-card:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+/* ----------------------------------------------------------------------------
+   Mobile Responsive
+   ---------------------------------------------------------------------------- */
+
+@media (max-width: 600px) {
+    .monday-items {
+        gap: 0.8em;
+    }
+
+    .monday-item-card {
+        padding: 1em;
+    }
+
+    .monday-item-columns {
+        flex-direction: column;
+    }
+}
+
+/* ----------------------------------------------------------------------------
+   Print Styles
+   ---------------------------------------------------------------------------- */
+
+@media print {
+    .monday-refresh-btn,
+    .monday-header-actions {
+        display: none;
+    }
+}

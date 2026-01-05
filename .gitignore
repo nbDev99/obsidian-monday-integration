@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Build artifacts (keep main.js for releases)
+*.js.map
+
+# IDE
+.idea/
+.vscode/
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Plugin data
+data.json
+
+# npm
+package-lock.json
