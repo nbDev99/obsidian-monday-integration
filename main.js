@@ -119,6 +119,69 @@ var MondayApiClient = class {
       items: ((_a = board.items_page) == null ? void 0 : _a.items) || []
     };
   }
+  async changeItemStatus(boardId, itemId, columnId, statusLabel) {
+    try {
+      const value = JSON.stringify({ label: statusLabel });
+      await this.query(`
+                mutation {
+                    change_column_value(
+                        board_id: ${boardId},
+                        item_id: ${itemId},
+                        column_id: "${columnId}",
+                        value: ${JSON.stringify(value)}
+                    ) {
+                        id
+                    }
+                }
+            `);
+      return true;
+    } catch (error) {
+      console.error("Failed to change status:", error);
+      throw error;
+    }
+  }
+  async addItemUpdate(itemId, body) {
+    try {
+      await this.query(`
+                mutation {
+                    create_update(
+                        item_id: ${itemId},
+                        body: ${JSON.stringify(body)}
+                    ) {
+                        id
+                    }
+                }
+            `);
+      return true;
+    } catch (error) {
+      console.error("Failed to add update:", error);
+      throw error;
+    }
+  }
+  async getStatusColumnSettings(boardId, columnId) {
+    var _a, _b, _c, _d;
+    try {
+      const data = await this.query(`
+                query {
+                    boards(ids: [${boardId}]) {
+                        columns(ids: ["${columnId}"]) {
+                            settings_str
+                        }
+                    }
+                }
+            `);
+      if ((_d = (_c = (_b = (_a = data.boards) == null ? void 0 : _a[0]) == null ? void 0 : _b.columns) == null ? void 0 : _c[0]) == null ? void 0 : _d.settings_str) {
+        const settings = JSON.parse(data.boards[0].columns[0].settings_str);
+        if (settings.labels) {
+          return Object.values(settings.labels);
+        }
+      }
+      return [];
+    } catch (error) {
+      console.error("Failed to get status settings:", error);
+      return [];
+    }
+  }
 };
 var MondayDashboardRenderer = class extends import_obsidian.MarkdownRenderChild {
   constructor(containerEl, plugin, options) {
@@ -404,12 +467,14 @@ function parseDashboardOptions(source) {
   return options;
 }
 var MondayView = class extends import_obsidian.ItemView {
+  // columnId -> status labels
   constructor(leaf, plugin) {
     super(leaf);
     this.selectedBoardId = null;
     this.currentBoardData = null;
     this.statusFilter = { selected: /* @__PURE__ */ new Set(), mode: "include" };
     this.groupFilter = { selected: /* @__PURE__ */ new Set(), mode: "include" };
+    this.availableStatuses = /* @__PURE__ */ new Map();
     this.plugin = plugin;
   }
   getViewType() {
@@ -489,6 +554,15 @@ var MondayView = class extends import_obsidian.ItemView {
     try {
       if (!this.currentBoardData) {
         this.currentBoardData = await this.plugin.apiClient.getBoardData(this.selectedBoardId, 100);
+        if (this.currentBoardData) {
+          const statusColumns = this.currentBoardData.columns.filter((c) => c.type === "status");
+          for (const col of statusColumns) {
+            const statuses = await this.plugin.apiClient.getStatusColumnSettings(this.selectedBoardId, col.id);
+            if (statuses.length > 0) {
+              this.availableStatuses.set(col.id, statuses);
+            }
+          }
+        }
       }
       if (!this.currentBoardData) {
         if (itemsContainer) {
@@ -704,26 +778,51 @@ var MondayView = class extends import_obsidian.ItemView {
       groupEl.createEl("div", { text: groupName, cls: "monday-sidebar-group-title" });
       for (const item of items) {
         const itemEl = groupEl.createEl("div", { cls: "monday-sidebar-item monday-sidebar-item-clickable" });
-        itemEl.createEl("span", { text: item.name, cls: "monday-sidebar-item-name" });
-        const statusCol = item.column_values.find((cv) => {
-          const col = boardData.columns.find((c) => c.id === cv.id);
-          return (col == null ? void 0 : col.type) === "status";
+        const nameEl = itemEl.createEl("span", { text: item.name, cls: "monday-sidebar-item-name" });
+        nameEl.addEventListener("click", (e) => {
+          e.stopPropagation();
+          void this.handleItemClick(item, boardData);
         });
-        if (statusCol == null ? void 0 : statusCol.text) {
-          const statusBadge = itemEl.createEl("span", {
-            text: statusCol.text,
+        const actionsEl = itemEl.createEl("div", { cls: "monday-item-actions" });
+        const statusColumn = boardData.columns.find((c) => c.type === "status");
+        const statusColValue = statusColumn ? item.column_values.find((cv) => cv.id === statusColumn.id) : null;
+        const currentStatus = (statusColValue == null ? void 0 : statusColValue.text) || "";
+        if (statusColumn && this.availableStatuses.has(statusColumn.id)) {
+          const statusOptions = this.availableStatuses.get(statusColumn.id) || [];
+          const statusDropdown = actionsEl.createEl("select", { cls: "monday-status-dropdown" });
+          statusDropdown.title = "Change status";
+          for (const status of statusOptions) {
+            const opt = statusDropdown.createEl("option", { text: status, value: status });
+            if (status === currentStatus) {
+              opt.selected = true;
+            }
+          }
+          statusDropdown.addEventListener("change", async (e) => {
+            e.stopPropagation();
+            const newStatus = e.target.value;
+            if (newStatus !== currentStatus && this.selectedBoardId) {
+              await this.changeItemStatus(item, statusColumn.id, newStatus);
+            }
+          });
+          statusDropdown.addEventListener("click", (e) => e.stopPropagation());
+        }
+        if (currentStatus) {
+          const statusBadge = actionsEl.createEl("span", {
+            text: currentStatus,
             cls: "monday-sidebar-status"
           });
           try {
-            const valueObj = statusCol.value ? JSON.parse(statusCol.value) : null;
+            const valueObj = (statusColValue == null ? void 0 : statusColValue.value) ? JSON.parse(statusColValue.value) : null;
             if ((_b = valueObj == null ? void 0 : valueObj.label_style) == null ? void 0 : _b.color) {
               statusBadge.style.backgroundColor = valueObj.label_style.color;
             }
           } catch (e) {
           }
         }
-        itemEl.addEventListener("click", () => {
-          void this.handleItemClick(item, boardData);
+        itemEl.addEventListener("contextmenu", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.showItemContextMenu(e, item, boardData);
         });
       }
     }
@@ -845,6 +944,72 @@ var MondayView = class extends import_obsidian.ItemView {
     await app.workspace.openLinkText(notePath, "", false);
     new import_obsidian.Notice(`Created note: ${file.basename}`);
   }
+  showItemContextMenu(event, item, boardData) {
+    const menu = new import_obsidian.Menu();
+    menu.addItem((menuItem) => {
+      menuItem.setTitle("Create note").setIcon("file-plus").onClick(() => {
+        void this.handleItemClick(item, boardData);
+      });
+    });
+    menu.addSeparator();
+    const statusColumn = boardData.columns.find((c) => c.type === "status");
+    if (statusColumn && this.availableStatuses.has(statusColumn.id)) {
+      const statusOptions = this.availableStatuses.get(statusColumn.id) || [];
+      const currentStatusValue = item.column_values.find((cv) => cv.id === statusColumn.id);
+      const currentStatus = (currentStatusValue == null ? void 0 : currentStatusValue.text) || "";
+      menu.addItem((menuItem) => {
+        menuItem.setTitle("Change status").setIcon("check-circle");
+        const submenu = menuItem.setSubmenu();
+        for (const status of statusOptions) {
+          submenu.addItem((subItem) => {
+            subItem.setTitle(status).setChecked(status === currentStatus).onClick(() => {
+              if (status !== currentStatus) {
+                void this.changeItemStatus(item, statusColumn.id, status);
+              }
+            });
+          });
+        }
+      });
+    }
+    menu.addItem((menuItem) => {
+      menuItem.setTitle("Add comment").setIcon("message-square").onClick(() => {
+        new AddCommentModal(this.app, item.name, async (comment) => {
+          if (comment) {
+            await this.addItemComment(item, comment);
+          }
+        }).open();
+      });
+    });
+    menu.showAtMouseEvent(event);
+  }
+  async changeItemStatus(item, columnId, newStatus) {
+    if (!this.selectedBoardId)
+      return;
+    try {
+      new import_obsidian.Notice(`Changing status to "${newStatus}"...`);
+      await this.plugin.apiClient.changeItemStatus(
+        this.selectedBoardId,
+        item.id,
+        columnId,
+        newStatus
+      );
+      new import_obsidian.Notice(`Status updated to "${newStatus}"`);
+      this.currentBoardData = null;
+      const container = this.containerEl.children[1];
+      await this.loadAndRenderBoard(container);
+    } catch (error) {
+      new import_obsidian.Notice(`Failed to change status: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  }
+  async addItemComment(item, comment) {
+    try {
+      new import_obsidian.Notice("Adding comment...");
+      await this.plugin.apiClient.addItemUpdate(item.id, comment);
+      new import_obsidian.Notice("Comment added successfully");
+    } catch (error) {
+      new import_obsidian.Notice(`Failed to add comment: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  }
   async refreshBoards() {
     try {
       new import_obsidian.Notice("Refreshing Monday.com boards...");
@@ -890,6 +1055,46 @@ var DuplicateNoteModal = class extends import_obsidian.Modal {
     cancelBtn.addEventListener("click", () => {
       this.close();
     });
+  }
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
+  }
+};
+var AddCommentModal = class extends import_obsidian.Modal {
+  constructor(app, itemName, callback) {
+    super(app);
+    this.itemName = itemName;
+    this.callback = callback;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("monday-comment-modal");
+    contentEl.createEl("h3", { text: "Add Comment" });
+    contentEl.createEl("p", { text: `Adding comment to: ${this.itemName}`, cls: "monday-comment-item-name" });
+    const textArea = contentEl.createEl("textarea", {
+      cls: "monday-comment-textarea",
+      attr: { placeholder: "Enter your comment..." }
+    });
+    textArea.rows = 5;
+    const buttonContainer = contentEl.createEl("div", { cls: "monday-modal-buttons" });
+    const submitBtn = buttonContainer.createEl("button", { text: "Add Comment", cls: "mod-cta" });
+    submitBtn.addEventListener("click", () => {
+      const comment = textArea.value.trim();
+      if (comment) {
+        this.callback(comment);
+        this.close();
+      } else {
+        new import_obsidian.Notice("Please enter a comment");
+      }
+    });
+    const cancelBtn = buttonContainer.createEl("button", { text: "Cancel" });
+    cancelBtn.addEventListener("click", () => {
+      this.callback(null);
+      this.close();
+    });
+    setTimeout(() => textArea.focus(), 50);
   }
   onClose() {
     const { contentEl } = this;

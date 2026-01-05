@@ -750,3 +750,102 @@
     font-family: var(--font-monospace);
     font-size: 0.85em;
 }
+
+/* ----------------------------------------------------------------------------
+   Item Actions (Status Dropdown & Buttons)
+   ---------------------------------------------------------------------------- */
+
+.monday-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    flex-shrink: 0;
+}
+
+.monday-status-dropdown {
+    font-size: 0.7em;
+    padding: 0.15em 0.3em;
+    border-radius: 3px;
+    border: 1px solid var(--background-modifier-border);
+    background: var(--background-primary);
+    color: var(--text-normal);
+    cursor: pointer;
+    max-width: 80px;
+    text-overflow: ellipsis;
+}
+
+.monday-status-dropdown:hover {
+    border-color: var(--interactive-accent);
+}
+
+.monday-status-dropdown:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+}
+
+/* Adjust sidebar item layout for actions */
+.monday-sidebar-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4em 0.5em;
+    border-radius: 4px;
+    margin-bottom: 0.2em;
+    gap: 0.5em;
+}
+
+.monday-sidebar-item-name {
+    flex: 1;
+    font-size: 0.9em;
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.monday-sidebar-item-name:hover {
+    text-decoration: underline;
+}
+
+/* ----------------------------------------------------------------------------
+   Add Comment Modal
+   ---------------------------------------------------------------------------- */
+
+.monday-comment-modal {
+    padding: 0.5em;
+}
+
+.monday-comment-modal h3 {
+    margin: 0 0 0.5em 0;
+    color: var(--text-normal);
+}
+
+.monday-comment-item-name {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    margin-bottom: 1em;
+}
+
+.monday-comment-textarea {
+    width: 100%;
+    min-width: 300px;
+    padding: 0.5em;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-family: inherit;
+    font-size: 0.9em;
+    resize: vertical;
+}
+
+.monday-comment-textarea:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+}
+
+.monday-comment-textarea::placeholder {
+    color: var(--text-faint);
+}

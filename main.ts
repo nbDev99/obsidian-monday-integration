@@ -10,7 +10,8 @@ import {
     Notice,
     Modal,
     TFile,
-    normalizePath
+    normalizePath,
+    Menu
 } from 'obsidian';
 
 // ============================================================================
@@ -187,6 +188,72 @@ class MondayApiClient {
             columns: board.columns,
             items: board.items_page?.items || []
         };
+    }
+
+    async changeItemStatus(boardId: string, itemId: string, columnId: string, statusLabel: string): Promise<boolean> {
+        try {
+            const value = JSON.stringify({ label: statusLabel });
+            await this.query(`
+                mutation {
+                    change_column_value(
+                        board_id: ${boardId},
+                        item_id: ${itemId},
+                        column_id: "${columnId}",
+                        value: ${JSON.stringify(value)}
+                    ) {
+                        id
+                    }
+                }
+            `);
+            return true;
+        } catch (error) {
+            console.error('Failed to change status:', error);
+            throw error;
+        }
+    }
+
+    async addItemUpdate(itemId: string, body: string): Promise<boolean> {
+        try {
+            await this.query(`
+                mutation {
+                    create_update(
+                        item_id: ${itemId},
+                        body: ${JSON.stringify(body)}
+                    ) {
+                        id
+                    }
+                }
+            `);
+            return true;
+        } catch (error) {
+            console.error('Failed to add update:', error);
+            throw error;
+        }
+    }
+
+    async getStatusColumnSettings(boardId: string, columnId: string): Promise<string[]> {
+        try {
+            const data = await this.query(`
+                query {
+                    boards(ids: [${boardId}]) {
+                        columns(ids: ["${columnId}"]) {
+                            settings_str
+                        }
+                    }
+                }
+            `);
+
+            if (data.boards?.[0]?.columns?.[0]?.settings_str) {
+                const settings = JSON.parse(data.boards[0].columns[0].settings_str);
+                if (settings.labels) {
+                    return Object.values(settings.labels) as string[];
+                }
+            }
+            return [];
+        } catch (error) {
+            console.error('Failed to get status settings:', error);
+            return [];
+        }
     }
 }
 
@@ -580,6 +647,7 @@ class MondayView extends ItemView {
     private currentBoardData: BoardData | null = null;
     private statusFilter: SidebarFilter = { selected: new Set(), mode: 'include' };
     private groupFilter: SidebarFilter = { selected: new Set(), mode: 'include' };
+    private availableStatuses: Map<string, string[]> = new Map(); // columnId -> status labels
 
     constructor(leaf: WorkspaceLeaf, plugin: MondayIntegrationPlugin) {
         super(leaf);
@@ -690,6 +758,17 @@ class MondayView extends ItemView {
             // Fetch board data if not cached
             if (!this.currentBoardData) {
                 this.currentBoardData = await this.plugin.apiClient.getBoardData(this.selectedBoardId, 100);
+
+                // Fetch available status options for status columns
+                if (this.currentBoardData) {
+                    const statusColumns = this.currentBoardData.columns.filter(c => c.type === 'status');
+                    for (const col of statusColumns) {
+                        const statuses = await this.plugin.apiClient.getStatusColumnSettings(this.selectedBoardId, col.id);
+                        if (statuses.length > 0) {
+                            this.availableStatuses.set(col.id, statuses);
+                        }
+                    }
+                }
             }
 
             if (!this.currentBoardData) {
@@ -966,20 +1045,54 @@ class MondayView extends ItemView {
 
             for (const item of items) {
                 const itemEl = groupEl.createEl('div', { cls: 'monday-sidebar-item monday-sidebar-item-clickable' });
-                itemEl.createEl('span', { text: item.name, cls: 'monday-sidebar-item-name' });
 
-                // Find status column
-                const statusCol = item.column_values.find(cv => {
-                    const col = boardData.columns.find(c => c.id === cv.id);
-                    return col?.type === 'status';
+                // Item name (clickable to create note)
+                const nameEl = itemEl.createEl('span', { text: item.name, cls: 'monday-sidebar-item-name' });
+                nameEl.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    void this.handleItemClick(item, boardData);
                 });
-                if (statusCol?.text) {
-                    const statusBadge = itemEl.createEl('span', {
-                        text: statusCol.text,
+
+                // Actions container
+                const actionsEl = itemEl.createEl('div', { cls: 'monday-item-actions' });
+
+                // Find status column and its info
+                const statusColumn = boardData.columns.find(c => c.type === 'status');
+                const statusColValue = statusColumn ? item.column_values.find(cv => cv.id === statusColumn.id) : null;
+                const currentStatus = statusColValue?.text || '';
+
+                // Quick status dropdown
+                if (statusColumn && this.availableStatuses.has(statusColumn.id)) {
+                    const statusOptions = this.availableStatuses.get(statusColumn.id) || [];
+                    const statusDropdown = actionsEl.createEl('select', { cls: 'monday-status-dropdown' });
+                    statusDropdown.title = 'Change status';
+
+                    for (const status of statusOptions) {
+                        const opt = statusDropdown.createEl('option', { text: status, value: status });
+                        if (status === currentStatus) {
+                            opt.selected = true;
+                        }
+                    }
+
+                    statusDropdown.addEventListener('change', async (e) => {
+                        e.stopPropagation();
+                        const newStatus = (e.target as HTMLSelectElement).value;
+                        if (newStatus !== currentStatus && this.selectedBoardId) {
+                            await this.changeItemStatus(item, statusColumn.id, newStatus);
+                        }
+                    });
+
+                    statusDropdown.addEventListener('click', (e) => e.stopPropagation());
+                }
+
+                // Status badge (visual indicator)
+                if (currentStatus) {
+                    const statusBadge = actionsEl.createEl('span', {
+                        text: currentStatus,
                         cls: 'monday-sidebar-status'
                     });
                     try {
-                        const valueObj = statusCol.value ? JSON.parse(statusCol.value) : null;
+                        const valueObj = statusColValue?.value ? JSON.parse(statusColValue.value) : null;
                         if (valueObj?.label_style?.color) {
                             statusBadge.style.backgroundColor = valueObj.label_style.color;
                         }
@@ -988,9 +1101,11 @@ class MondayView extends ItemView {
                     }
                 }
 
-                // Click to create note
-                itemEl.addEventListener('click', () => {
-                    void this.handleItemClick(item, boardData);
+                // Context menu on right-click
+                itemEl.addEventListener('contextmenu', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    this.showItemContextMenu(e, item, boardData);
                 });
             }
         }
@@ -1129,6 +1244,99 @@ class MondayView extends ItemView {
         new Notice(`Created note: ${file.basename}`);
     }
 
+    private showItemContextMenu(event: MouseEvent, item: Item, boardData: BoardData) {
+        const menu = new Menu();
+
+        // Create note option
+        menu.addItem((menuItem) => {
+            menuItem
+                .setTitle('Create note')
+                .setIcon('file-plus')
+                .onClick(() => {
+                    void this.handleItemClick(item, boardData);
+                });
+        });
+
+        menu.addSeparator();
+
+        // Status change submenu
+        const statusColumn = boardData.columns.find(c => c.type === 'status');
+        if (statusColumn && this.availableStatuses.has(statusColumn.id)) {
+            const statusOptions = this.availableStatuses.get(statusColumn.id) || [];
+            const currentStatusValue = item.column_values.find(cv => cv.id === statusColumn.id);
+            const currentStatus = currentStatusValue?.text || '';
+
+            menu.addItem((menuItem) => {
+                menuItem
+                    .setTitle('Change status')
+                    .setIcon('check-circle');
+
+                // Add submenu items for each status
+                const submenu = (menuItem as any).setSubmenu() as Menu;
+                for (const status of statusOptions) {
+                    submenu.addItem((subItem) => {
+                        subItem
+                            .setTitle(status)
+                            .setChecked(status === currentStatus)
+                            .onClick(() => {
+                                if (status !== currentStatus) {
+                                    void this.changeItemStatus(item, statusColumn.id, status);
+                                }
+                            });
+                    });
+                }
+            });
+        }
+
+        // Add comment option
+        menu.addItem((menuItem) => {
+            menuItem
+                .setTitle('Add comment')
+                .setIcon('message-square')
+                .onClick(() => {
+                    new AddCommentModal(this.app, item.name, async (comment) => {
+                        if (comment) {
+                            await this.addItemComment(item, comment);
+                        }
+                    }).open();
+                });
+        });
+
+        menu.showAtMouseEvent(event);
+    }
+
+    private async changeItemStatus(item: Item, columnId: string, newStatus: string) {
+        if (!this.selectedBoardId) return;
+
+        try {
+            new Notice(`Changing status to "${newStatus}"...`);
+            await this.plugin.apiClient.changeItemStatus(
+                this.selectedBoardId,
+                item.id,
+                columnId,
+                newStatus
+            );
+            new Notice(`Status updated to "${newStatus}"`);
+
+            // Refresh the board data to show the update
+            this.currentBoardData = null;
+            const container = this.containerEl.children[1];
+            await this.loadAndRenderBoard(container);
+        } catch (error) {
+            new Notice(`Failed to change status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    private async addItemComment(item: Item, comment: string) {
+        try {
+            new Notice('Adding comment...');
+            await this.plugin.apiClient.addItemUpdate(item.id, comment);
+            new Notice('Comment added successfully');
+        } catch (error) {
+            new Notice(`Failed to add comment: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
     private async refreshBoards() {
         try {
             new Notice('Refreshing Monday.com boards...');
@@ -1190,6 +1398,63 @@ class DuplicateNoteModal extends Modal {
         cancelBtn.addEventListener('click', () => {
             this.close();
         });
+    }
+
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
+    }
+}
+
+// ============================================================================
+// Add Comment Modal
+// ============================================================================
+
+class AddCommentModal extends Modal {
+    private itemName: string;
+    private callback: (comment: string | null) => void;
+
+    constructor(app: App, itemName: string, callback: (comment: string | null) => void) {
+        super(app);
+        this.itemName = itemName;
+        this.callback = callback;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.addClass('monday-comment-modal');
+
+        contentEl.createEl('h3', { text: 'Add Comment' });
+        contentEl.createEl('p', { text: `Adding comment to: ${this.itemName}`, cls: 'monday-comment-item-name' });
+
+        const textArea = contentEl.createEl('textarea', {
+            cls: 'monday-comment-textarea',
+            attr: { placeholder: 'Enter your comment...' }
+        });
+        textArea.rows = 5;
+
+        const buttonContainer = contentEl.createEl('div', { cls: 'monday-modal-buttons' });
+
+        const submitBtn = buttonContainer.createEl('button', { text: 'Add Comment', cls: 'mod-cta' });
+        submitBtn.addEventListener('click', () => {
+            const comment = textArea.value.trim();
+            if (comment) {
+                this.callback(comment);
+                this.close();
+            } else {
+                new Notice('Please enter a comment');
+            }
+        });
+
+        const cancelBtn = buttonContainer.createEl('button', { text: 'Cancel' });
+        cancelBtn.addEventListener('click', () => {
+            this.callback(null);
+            this.close();
+        });
+
+        // Focus the textarea
+        setTimeout(() => textArea.focus(), 50);
     }
 
     onClose() {
