@@ -35,7 +35,9 @@ var DEFAULT_SETTINGS = {
   refreshInterval: 5,
   showStatusBar: true,
   cachedBoards: [],
-  lastSync: 0
+  lastSync: 0,
+  noteFolder: "Monday",
+  noteNameTemplate: "{name}"
 };
 var MondayApiClient = class {
   constructor(apiToken) {
@@ -402,9 +404,14 @@ function parseDashboardOptions(source) {
   return options;
 }
 var MondayView = class extends import_obsidian.ItemView {
+  // empty = all
   constructor(leaf, plugin) {
     super(leaf);
     this.selectedBoardId = null;
+    this.currentBoardData = null;
+    this.statusFilter = "";
+    // empty = all
+    this.groupFilter = "";
     this.plugin = plugin;
   }
   getViewType() {
@@ -455,14 +462,290 @@ var MondayView = class extends import_obsidian.ItemView {
     }
     selectEl.addEventListener("change", (e) => {
       this.selectedBoardId = e.target.value;
-      void this.renderBoardItems(container);
+      this.statusFilter = "";
+      this.groupFilter = "";
+      this.currentBoardData = null;
+      void this.loadAndRenderBoard(container);
     });
+    container.createEl("div", { cls: "monday-sidebar-filters" });
     const itemsContainer = container.createEl("div", { cls: "monday-sidebar-items" });
     if (this.selectedBoardId) {
-      await this.renderBoardItems(container);
+      await this.loadAndRenderBoard(container);
     } else if (this.plugin.settings.cachedBoards.length === 0) {
       itemsContainer.createEl("p", { text: "Click refresh to load boards.", cls: "monday-sidebar-hint" });
     }
+  }
+  async loadAndRenderBoard(container) {
+    const htmlContainer = container;
+    const filtersContainer = htmlContainer.querySelector(".monday-sidebar-filters");
+    const itemsContainer = htmlContainer.querySelector(".monday-sidebar-items");
+    if (!this.selectedBoardId)
+      return;
+    if (itemsContainer) {
+      itemsContainer.empty();
+      itemsContainer.createEl("div", { text: "Loading items...", cls: "monday-sidebar-loading" });
+    }
+    try {
+      if (!this.currentBoardData) {
+        this.currentBoardData = await this.plugin.apiClient.getBoardData(this.selectedBoardId, 100);
+      }
+      if (!this.currentBoardData) {
+        if (itemsContainer) {
+          itemsContainer.empty();
+          itemsContainer.createEl("p", { text: "Board not found." });
+        }
+        return;
+      }
+      this.renderFilters(filtersContainer, this.currentBoardData);
+      this.renderFilteredItems(itemsContainer, this.currentBoardData);
+    } catch (error) {
+      if (itemsContainer) {
+        itemsContainer.empty();
+        itemsContainer.createEl("p", {
+          text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+          cls: "monday-sidebar-error"
+        });
+      }
+    }
+  }
+  renderFilters(container, boardData) {
+    var _a;
+    if (!container)
+      return;
+    container.empty();
+    const statuses = /* @__PURE__ */ new Set();
+    const statusColumns = boardData.columns.filter((c) => c.type === "status");
+    for (const item of boardData.items) {
+      for (const statusCol of statusColumns) {
+        const colValue = item.column_values.find((cv) => cv.id === statusCol.id);
+        if (colValue == null ? void 0 : colValue.text) {
+          statuses.add(colValue.text);
+        }
+      }
+    }
+    const groups = /* @__PURE__ */ new Set();
+    for (const item of boardData.items) {
+      if ((_a = item.group) == null ? void 0 : _a.title) {
+        groups.add(item.group.title);
+      }
+    }
+    if (statuses.size > 0) {
+      const statusFilterEl = container.createEl("div", { cls: "monday-filter-row" });
+      statusFilterEl.createEl("label", { text: "Status:", cls: "monday-filter-label" });
+      const statusSelect = statusFilterEl.createEl("select", { cls: "monday-filter-select" });
+      statusSelect.createEl("option", { text: "All statuses", value: "" });
+      for (const status of Array.from(statuses).sort()) {
+        const opt = statusSelect.createEl("option", { text: status, value: status });
+        if (status === this.statusFilter)
+          opt.selected = true;
+      }
+      statusSelect.addEventListener("change", (e) => {
+        var _a2;
+        this.statusFilter = e.target.value;
+        const itemsContainer = (_a2 = container.parentElement) == null ? void 0 : _a2.querySelector(".monday-sidebar-items");
+        if (itemsContainer && this.currentBoardData) {
+          this.renderFilteredItems(itemsContainer, this.currentBoardData);
+        }
+      });
+    }
+    if (groups.size > 0) {
+      const groupFilterEl = container.createEl("div", { cls: "monday-filter-row" });
+      groupFilterEl.createEl("label", { text: "Group:", cls: "monday-filter-label" });
+      const groupSelect = groupFilterEl.createEl("select", { cls: "monday-filter-select" });
+      groupSelect.createEl("option", { text: "All groups", value: "" });
+      for (const group of Array.from(groups).sort()) {
+        const opt = groupSelect.createEl("option", { text: group, value: group });
+        if (group === this.groupFilter)
+          opt.selected = true;
+      }
+      groupSelect.addEventListener("change", (e) => {
+        var _a2;
+        this.groupFilter = e.target.value;
+        const itemsContainer = (_a2 = container.parentElement) == null ? void 0 : _a2.querySelector(".monday-sidebar-items");
+        if (itemsContainer && this.currentBoardData) {
+          this.renderFilteredItems(itemsContainer, this.currentBoardData);
+        }
+      });
+    }
+  }
+  renderFilteredItems(container, boardData) {
+    var _a, _b;
+    container.empty();
+    let filteredItems = boardData.items;
+    if (this.statusFilter) {
+      const statusColumns = boardData.columns.filter((c) => c.type === "status");
+      filteredItems = filteredItems.filter((item) => {
+        for (const statusCol of statusColumns) {
+          const colValue = item.column_values.find((cv) => cv.id === statusCol.id);
+          if ((colValue == null ? void 0 : colValue.text) === this.statusFilter)
+            return true;
+        }
+        return false;
+      });
+    }
+    if (this.groupFilter) {
+      filteredItems = filteredItems.filter((item) => {
+        var _a2;
+        return ((_a2 = item.group) == null ? void 0 : _a2.title) === this.groupFilter;
+      });
+    }
+    if (filteredItems.length === 0) {
+      container.createEl("p", { text: "No items match the filters.", cls: "monday-sidebar-hint" });
+      return;
+    }
+    const groupedItems = /* @__PURE__ */ new Map();
+    for (const item of filteredItems) {
+      const groupName = ((_a = item.group) == null ? void 0 : _a.title) || "No Group";
+      if (!groupedItems.has(groupName)) {
+        groupedItems.set(groupName, []);
+      }
+      groupedItems.get(groupName).push(item);
+    }
+    for (const [groupName, items] of groupedItems) {
+      const groupEl = container.createEl("div", { cls: "monday-sidebar-group" });
+      groupEl.createEl("div", { text: groupName, cls: "monday-sidebar-group-title" });
+      for (const item of items) {
+        const itemEl = groupEl.createEl("div", { cls: "monday-sidebar-item monday-sidebar-item-clickable" });
+        itemEl.createEl("span", { text: item.name, cls: "monday-sidebar-item-name" });
+        const statusCol = item.column_values.find((cv) => {
+          const col = boardData.columns.find((c) => c.id === cv.id);
+          return (col == null ? void 0 : col.type) === "status";
+        });
+        if (statusCol == null ? void 0 : statusCol.text) {
+          const statusBadge = itemEl.createEl("span", {
+            text: statusCol.text,
+            cls: "monday-sidebar-status"
+          });
+          try {
+            const valueObj = statusCol.value ? JSON.parse(statusCol.value) : null;
+            if ((_b = valueObj == null ? void 0 : valueObj.label_style) == null ? void 0 : _b.color) {
+              statusBadge.style.backgroundColor = valueObj.label_style.color;
+            }
+          } catch (e) {
+          }
+        }
+        itemEl.addEventListener("click", () => {
+          void this.handleItemClick(item, boardData);
+        });
+      }
+    }
+    container.createEl("div", {
+      text: `Showing ${filteredItems.length} of ${boardData.items.length} items`,
+      cls: "monday-sidebar-item-count"
+    });
+  }
+  async handleItemClick(item, boardData) {
+    const plugin = this.plugin;
+    const app = this.app;
+    const noteName = this.generateNoteName(item, boardData);
+    const noteFolder = plugin.settings.noteFolder || "Monday";
+    const notePath = (0, import_obsidian.normalizePath)(`${noteFolder}/${noteName}.md`);
+    const existingFile = app.vault.getAbstractFileByPath(notePath);
+    if (existingFile && existingFile instanceof import_obsidian.TFile) {
+      new DuplicateNoteModal(app, notePath, async (action) => {
+        if (action === "open") {
+          await app.workspace.openLinkText(notePath, "", false);
+        } else if (action === "create") {
+          let counter = 1;
+          let newPath = notePath;
+          while (app.vault.getAbstractFileByPath(newPath)) {
+            newPath = (0, import_obsidian.normalizePath)(`${noteFolder}/${noteName} (${counter}).md`);
+            counter++;
+          }
+          await this.createNoteForItem(item, boardData, newPath);
+        }
+      }).open();
+    } else {
+      await this.createNoteForItem(item, boardData, notePath);
+    }
+  }
+  generateNoteName(item, boardData) {
+    var _a;
+    const template = this.plugin.settings.noteNameTemplate || "{name}";
+    const boardName = boardData.name || "Unknown Board";
+    const groupName = ((_a = item.group) == null ? void 0 : _a.title) || "No Group";
+    const sanitise = (str) => str.replace(/[\\/:*?"<>|]/g, "-");
+    return template.replace("{name}", sanitise(item.name)).replace("{board}", sanitise(boardName)).replace("{group}", sanitise(groupName)).replace("{id}", item.id);
+  }
+  async createNoteForItem(item, boardData, notePath) {
+    var _a, _b;
+    const app = this.app;
+    const plugin = this.plugin;
+    const folderPath = notePath.substring(0, notePath.lastIndexOf("/"));
+    if (folderPath && !app.vault.getAbstractFileByPath(folderPath)) {
+      await app.vault.createFolder(folderPath);
+    }
+    const statusCol = item.column_values.find((cv) => {
+      const col = boardData.columns.find((c) => c.id === cv.id);
+      return (col == null ? void 0 : col.type) === "status";
+    });
+    const dateCol = item.column_values.find((cv) => {
+      const col = boardData.columns.find((c) => c.id === cv.id);
+      return (col == null ? void 0 : col.type) === "date";
+    });
+    const personCol = item.column_values.find((cv) => {
+      const col = boardData.columns.find((c) => c.id === cv.id);
+      return (col == null ? void 0 : col.type) === "person" || (col == null ? void 0 : col.type) === "people";
+    });
+    const board = plugin.settings.cachedBoards.find((b) => b.id === this.selectedBoardId);
+    const frontmatter = {
+      title: item.name,
+      monday_id: item.id,
+      monday_board: boardData.name,
+      monday_board_id: this.selectedBoardId || "",
+      status: (statusCol == null ? void 0 : statusCol.text) || "",
+      group: ((_a = item.group) == null ? void 0 : _a.title) || "",
+      created: new Date().toISOString().split("T")[0],
+      tags: ["monday"]
+    };
+    if (dateCol == null ? void 0 : dateCol.text) {
+      frontmatter["due_date"] = dateCol.text;
+    }
+    if (personCol == null ? void 0 : personCol.text) {
+      frontmatter["assigned"] = personCol.text;
+    }
+    let content = "---\n";
+    for (const [key, value] of Object.entries(frontmatter)) {
+      if (Array.isArray(value)) {
+        content += `${key}:
+`;
+        for (const v of value) {
+          content += `  - ${v}
+`;
+        }
+      } else if (value) {
+        content += `${key}: "${value}"
+`;
+      }
+    }
+    content += "---\n\n";
+    content += `# ${item.name}
+
+`;
+    content += `## Details
+
+`;
+    content += `- **Board:** ${boardData.name}
+`;
+    content += `- **Group:** ${((_b = item.group) == null ? void 0 : _b.title) || "None"}
+`;
+    content += `- **Status:** ${(statusCol == null ? void 0 : statusCol.text) || "None"}
+`;
+    if (dateCol == null ? void 0 : dateCol.text) {
+      content += `- **Due Date:** ${dateCol.text}
+`;
+    }
+    if (personCol == null ? void 0 : personCol.text) {
+      content += `- **Assigned:** ${personCol.text}
+`;
+    }
+    content += `
+## Notes
+
+`;
+    const file = await app.vault.create(notePath, content);
+    await app.workspace.openLinkText(notePath, "", false);
+    new import_obsidian.Notice(`Created note: ${file.basename}`);
   }
   async refreshBoards() {
     try {
@@ -477,70 +760,42 @@ var MondayView = class extends import_obsidian.ItemView {
       new import_obsidian.Notice(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   }
-  async renderBoardItems(parentContainer) {
-    var _a, _b;
-    const container = parentContainer;
-    let itemsContainer = container.querySelector(".monday-sidebar-items");
-    if (!itemsContainer) {
-      itemsContainer = container.createEl("div", { cls: "monday-sidebar-items" });
-    }
-    itemsContainer.empty();
-    if (!this.selectedBoardId)
-      return;
-    itemsContainer.createEl("div", { text: "Loading items...", cls: "monday-sidebar-loading" });
-    try {
-      const boardData = await this.plugin.apiClient.getBoardData(this.selectedBoardId, 50);
-      itemsContainer.empty();
-      if (!boardData) {
-        itemsContainer.createEl("p", { text: "Board not found." });
-        return;
-      }
-      if (boardData.items.length === 0) {
-        itemsContainer.createEl("p", { text: "No items in this board." });
-        return;
-      }
-      const groupedItems = /* @__PURE__ */ new Map();
-      for (const item of boardData.items) {
-        const groupName = ((_a = item.group) == null ? void 0 : _a.title) || "No Group";
-        if (!groupedItems.has(groupName)) {
-          groupedItems.set(groupName, []);
-        }
-        groupedItems.get(groupName).push(item);
-      }
-      for (const [groupName, items] of groupedItems) {
-        const groupEl = itemsContainer.createEl("div", { cls: "monday-sidebar-group" });
-        groupEl.createEl("div", { text: groupName, cls: "monday-sidebar-group-title" });
-        for (const item of items) {
-          const itemEl = groupEl.createEl("div", { cls: "monday-sidebar-item" });
-          itemEl.createEl("span", { text: item.name, cls: "monday-sidebar-item-name" });
-          const statusCol = item.column_values.find((cv) => {
-            const col = boardData.columns.find((c) => c.id === cv.id);
-            return (col == null ? void 0 : col.type) === "status";
-          });
-          if (statusCol == null ? void 0 : statusCol.text) {
-            const statusBadge = itemEl.createEl("span", {
-              text: statusCol.text,
-              cls: "monday-sidebar-status"
-            });
-            try {
-              const valueObj = statusCol.value ? JSON.parse(statusCol.value) : null;
-              if ((_b = valueObj == null ? void 0 : valueObj.label_style) == null ? void 0 : _b.color) {
-                statusBadge.style.backgroundColor = valueObj.label_style.color;
-              }
-            } catch (e) {
-            }
-          }
-        }
-      }
-    } catch (error) {
-      itemsContainer.empty();
-      itemsContainer.createEl("p", {
-        text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
-        cls: "monday-sidebar-error"
-      });
-    }
-  }
   async onClose() {
+  }
+};
+var DuplicateNoteModal = class extends import_obsidian.Modal {
+  constructor(app, notePath, callback) {
+    super(app);
+    this.notePath = notePath;
+    this.callback = callback;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("monday-duplicate-modal");
+    contentEl.createEl("h3", { text: "Note Already Exists" });
+    contentEl.createEl("p", { text: `A note already exists at:` });
+    contentEl.createEl("code", { text: this.notePath, cls: "monday-modal-path" });
+    contentEl.createEl("p", { text: "What would you like to do?" });
+    const buttonContainer = contentEl.createEl("div", { cls: "monday-modal-buttons" });
+    const openBtn = buttonContainer.createEl("button", { text: "Open Existing Note", cls: "mod-cta" });
+    openBtn.addEventListener("click", () => {
+      this.callback("open");
+      this.close();
+    });
+    const createBtn = buttonContainer.createEl("button", { text: "Create New Note" });
+    createBtn.addEventListener("click", () => {
+      this.callback("create");
+      this.close();
+    });
+    const cancelBtn = buttonContainer.createEl("button", { text: "Cancel" });
+    cancelBtn.addEventListener("click", () => {
+      this.close();
+    });
+  }
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
   }
 };
 var StatusBarManager = class {
@@ -666,6 +921,24 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
       this.plugin.settings.refreshInterval = num;
       await this.plugin.saveSettings();
     }));
+    new import_obsidian.Setting(containerEl).setName("Note creation").setHeading();
+    new import_obsidian.Setting(containerEl).setName("Note folder").setDesc("Folder where notes created from Monday.com items will be saved").addText((text) => text.setPlaceholder("Monday").setValue(this.plugin.settings.noteFolder).onChange(async (value) => {
+      this.plugin.settings.noteFolder = value || "Monday";
+      await this.plugin.saveSettings();
+    }));
+    new import_obsidian.Setting(containerEl).setName("Note name template").setDesc("Template for note names. Use {name}, {board}, {group}, {id} as placeholders").addText((text) => {
+      text.inputEl.style.width = "200px";
+      return text.setPlaceholder("{name}").setValue(this.plugin.settings.noteNameTemplate).onChange(async (value) => {
+        this.plugin.settings.noteNameTemplate = value || "{name}";
+        await this.plugin.saveSettings();
+      });
+    });
+    const templateExamples = containerEl.createEl("div", { cls: "monday-template-examples" });
+    templateExamples.createEl("p", { text: "Examples:", cls: "monday-template-title" });
+    const exampleList = templateExamples.createEl("ul");
+    exampleList.createEl("li", { text: '{name} \u2192 "Fix login bug"' });
+    exampleList.createEl("li", { text: '{board}/{name} \u2192 "Project Alpha/Fix login bug"' });
+    exampleList.createEl("li", { text: '{group} - {name} \u2192 "Sprint 1 - Fix login bug"' });
     new import_obsidian.Setting(containerEl).setName("Usage").setHeading();
     const usageEl = containerEl.createEl("div", { cls: "monday-usage" });
     usageEl.createEl("p", { text: "Add a Monday.com dashboard to any note by inserting a code block:" });

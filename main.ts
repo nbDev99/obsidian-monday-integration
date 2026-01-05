@@ -7,7 +7,10 @@ import {
     ItemView,
     WorkspaceLeaf,
     requestUrl,
-    Notice
+    Notice,
+    Modal,
+    TFile,
+    normalizePath
 } from 'obsidian';
 
 // ============================================================================
@@ -28,6 +31,8 @@ interface MondayIntegrationSettings {
     showStatusBar: boolean;
     cachedBoards: Board[];
     lastSync: number; // timestamp
+    noteFolder: string; // folder for created notes
+    noteNameTemplate: string; // template: {name}, {board}, {group}, {id}
 }
 
 interface Board {
@@ -89,7 +94,9 @@ const DEFAULT_SETTINGS: MondayIntegrationSettings = {
     refreshInterval: 5,
     showStatusBar: true,
     cachedBoards: [],
-    lastSync: 0
+    lastSync: 0,
+    noteFolder: 'Monday',
+    noteNameTemplate: '{name}'
 };
 
 // ============================================================================
@@ -565,6 +572,9 @@ function parseDashboardOptions(source: string): DashboardOptions {
 class MondayView extends ItemView {
     private plugin: MondayIntegrationPlugin;
     private selectedBoardId: string | null = null;
+    private currentBoardData: BoardData | null = null;
+    private statusFilter: string = ''; // empty = all
+    private groupFilter: string = ''; // empty = all
 
     constructor(leaf: WorkspaceLeaf, plugin: MondayIntegrationPlugin) {
         super(leaf);
@@ -635,17 +645,335 @@ class MondayView extends ItemView {
 
         selectEl.addEventListener('change', (e) => {
             this.selectedBoardId = (e.target as HTMLSelectElement).value;
-            void this.renderBoardItems(container);
+            this.statusFilter = '';
+            this.groupFilter = '';
+            this.currentBoardData = null;
+            void this.loadAndRenderBoard(container);
         });
+
+        // Filters container (populated after board is loaded)
+        container.createEl('div', { cls: 'monday-sidebar-filters' });
 
         // Items container
         const itemsContainer = container.createEl('div', { cls: 'monday-sidebar-items' });
 
         if (this.selectedBoardId) {
-            await this.renderBoardItems(container);
+            await this.loadAndRenderBoard(container);
         } else if (this.plugin.settings.cachedBoards.length === 0) {
             itemsContainer.createEl('p', { text: 'Click refresh to load boards.', cls: 'monday-sidebar-hint' });
         }
+    }
+
+    private async loadAndRenderBoard(container: Element) {
+        const htmlContainer = container as HTMLElement;
+        const filtersContainer = htmlContainer.querySelector('.monday-sidebar-filters') as HTMLElement;
+        const itemsContainer = htmlContainer.querySelector('.monday-sidebar-items') as HTMLElement;
+
+        if (!this.selectedBoardId) return;
+
+        // Show loading
+        if (itemsContainer) {
+            itemsContainer.empty();
+            itemsContainer.createEl('div', { text: 'Loading items...', cls: 'monday-sidebar-loading' });
+        }
+
+        try {
+            // Fetch board data if not cached
+            if (!this.currentBoardData) {
+                this.currentBoardData = await this.plugin.apiClient.getBoardData(this.selectedBoardId, 100);
+            }
+
+            if (!this.currentBoardData) {
+                if (itemsContainer) {
+                    itemsContainer.empty();
+                    itemsContainer.createEl('p', { text: 'Board not found.' });
+                }
+                return;
+            }
+
+            // Render filters
+            this.renderFilters(filtersContainer, this.currentBoardData);
+
+            // Render items
+            this.renderFilteredItems(itemsContainer, this.currentBoardData);
+        } catch (error) {
+            if (itemsContainer) {
+                itemsContainer.empty();
+                itemsContainer.createEl('p', {
+                    text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                    cls: 'monday-sidebar-error'
+                });
+            }
+        }
+    }
+
+    private renderFilters(container: HTMLElement, boardData: BoardData) {
+        if (!container) return;
+        container.empty();
+
+        // Get unique statuses
+        const statuses = new Set<string>();
+        const statusColumns = boardData.columns.filter(c => c.type === 'status');
+        for (const item of boardData.items) {
+            for (const statusCol of statusColumns) {
+                const colValue = item.column_values.find(cv => cv.id === statusCol.id);
+                if (colValue?.text) {
+                    statuses.add(colValue.text);
+                }
+            }
+        }
+
+        // Get unique groups
+        const groups = new Set<string>();
+        for (const item of boardData.items) {
+            if (item.group?.title) {
+                groups.add(item.group.title);
+            }
+        }
+
+        // Status filter dropdown
+        if (statuses.size > 0) {
+            const statusFilterEl = container.createEl('div', { cls: 'monday-filter-row' });
+            statusFilterEl.createEl('label', { text: 'Status:', cls: 'monday-filter-label' });
+            const statusSelect = statusFilterEl.createEl('select', { cls: 'monday-filter-select' });
+            statusSelect.createEl('option', { text: 'All statuses', value: '' });
+            for (const status of Array.from(statuses).sort()) {
+                const opt = statusSelect.createEl('option', { text: status, value: status });
+                if (status === this.statusFilter) opt.selected = true;
+            }
+            statusSelect.addEventListener('change', (e) => {
+                this.statusFilter = (e.target as HTMLSelectElement).value;
+                const itemsContainer = container.parentElement?.querySelector('.monday-sidebar-items') as HTMLElement;
+                if (itemsContainer && this.currentBoardData) {
+                    this.renderFilteredItems(itemsContainer, this.currentBoardData);
+                }
+            });
+        }
+
+        // Group filter dropdown
+        if (groups.size > 0) {
+            const groupFilterEl = container.createEl('div', { cls: 'monday-filter-row' });
+            groupFilterEl.createEl('label', { text: 'Group:', cls: 'monday-filter-label' });
+            const groupSelect = groupFilterEl.createEl('select', { cls: 'monday-filter-select' });
+            groupSelect.createEl('option', { text: 'All groups', value: '' });
+            for (const group of Array.from(groups).sort()) {
+                const opt = groupSelect.createEl('option', { text: group, value: group });
+                if (group === this.groupFilter) opt.selected = true;
+            }
+            groupSelect.addEventListener('change', (e) => {
+                this.groupFilter = (e.target as HTMLSelectElement).value;
+                const itemsContainer = container.parentElement?.querySelector('.monday-sidebar-items') as HTMLElement;
+                if (itemsContainer && this.currentBoardData) {
+                    this.renderFilteredItems(itemsContainer, this.currentBoardData);
+                }
+            });
+        }
+    }
+
+    private renderFilteredItems(container: HTMLElement, boardData: BoardData) {
+        container.empty();
+
+        // Filter items
+        let filteredItems = boardData.items;
+
+        if (this.statusFilter) {
+            const statusColumns = boardData.columns.filter(c => c.type === 'status');
+            filteredItems = filteredItems.filter(item => {
+                for (const statusCol of statusColumns) {
+                    const colValue = item.column_values.find(cv => cv.id === statusCol.id);
+                    if (colValue?.text === this.statusFilter) return true;
+                }
+                return false;
+            });
+        }
+
+        if (this.groupFilter) {
+            filteredItems = filteredItems.filter(item => item.group?.title === this.groupFilter);
+        }
+
+        if (filteredItems.length === 0) {
+            container.createEl('p', { text: 'No items match the filters.', cls: 'monday-sidebar-hint' });
+            return;
+        }
+
+        // Group items by group
+        const groupedItems = new Map<string, Item[]>();
+        for (const item of filteredItems) {
+            const groupName = item.group?.title || 'No Group';
+            if (!groupedItems.has(groupName)) {
+                groupedItems.set(groupName, []);
+            }
+            groupedItems.get(groupName)!.push(item);
+        }
+
+        // Render grouped items
+        for (const [groupName, items] of groupedItems) {
+            const groupEl = container.createEl('div', { cls: 'monday-sidebar-group' });
+            groupEl.createEl('div', { text: groupName, cls: 'monday-sidebar-group-title' });
+
+            for (const item of items) {
+                const itemEl = groupEl.createEl('div', { cls: 'monday-sidebar-item monday-sidebar-item-clickable' });
+                itemEl.createEl('span', { text: item.name, cls: 'monday-sidebar-item-name' });
+
+                // Find status column
+                const statusCol = item.column_values.find(cv => {
+                    const col = boardData.columns.find(c => c.id === cv.id);
+                    return col?.type === 'status';
+                });
+                if (statusCol?.text) {
+                    const statusBadge = itemEl.createEl('span', {
+                        text: statusCol.text,
+                        cls: 'monday-sidebar-status'
+                    });
+                    try {
+                        const valueObj = statusCol.value ? JSON.parse(statusCol.value) : null;
+                        if (valueObj?.label_style?.color) {
+                            statusBadge.style.backgroundColor = valueObj.label_style.color;
+                        }
+                    } catch {
+                        // Use default
+                    }
+                }
+
+                // Click to create note
+                itemEl.addEventListener('click', () => {
+                    void this.handleItemClick(item, boardData);
+                });
+            }
+        }
+
+        // Item count
+        container.createEl('div', {
+            text: `Showing ${filteredItems.length} of ${boardData.items.length} items`,
+            cls: 'monday-sidebar-item-count'
+        });
+    }
+
+    private async handleItemClick(item: Item, boardData: BoardData) {
+        const plugin = this.plugin;
+        const app = this.app;
+
+        // Generate note path
+        const noteName = this.generateNoteName(item, boardData);
+        const noteFolder = plugin.settings.noteFolder || 'Monday';
+        const notePath = normalizePath(`${noteFolder}/${noteName}.md`);
+
+        // Check if file exists
+        const existingFile = app.vault.getAbstractFileByPath(notePath);
+
+        if (existingFile && existingFile instanceof TFile) {
+            // File exists - show modal
+            new DuplicateNoteModal(app, notePath, async (action) => {
+                if (action === 'open') {
+                    await app.workspace.openLinkText(notePath, '', false);
+                } else if (action === 'create') {
+                    // Create with incremented name
+                    let counter = 1;
+                    let newPath = notePath;
+                    while (app.vault.getAbstractFileByPath(newPath)) {
+                        newPath = normalizePath(`${noteFolder}/${noteName} (${counter}).md`);
+                        counter++;
+                    }
+                    await this.createNoteForItem(item, boardData, newPath);
+                }
+            }).open();
+        } else {
+            // Create the note
+            await this.createNoteForItem(item, boardData, notePath);
+        }
+    }
+
+    private generateNoteName(item: Item, boardData: BoardData): string {
+        const template = this.plugin.settings.noteNameTemplate || '{name}';
+        const boardName = boardData.name || 'Unknown Board';
+        const groupName = item.group?.title || 'No Group';
+
+        // Sanitise for filename
+        const sanitise = (str: string) => str.replace(/[\\/:*?"<>|]/g, '-');
+
+        return template
+            .replace('{name}', sanitise(item.name))
+            .replace('{board}', sanitise(boardName))
+            .replace('{group}', sanitise(groupName))
+            .replace('{id}', item.id);
+    }
+
+    private async createNoteForItem(item: Item, boardData: BoardData, notePath: string) {
+        const app = this.app;
+        const plugin = this.plugin;
+
+        // Ensure folder exists
+        const folderPath = notePath.substring(0, notePath.lastIndexOf('/'));
+        if (folderPath && !app.vault.getAbstractFileByPath(folderPath)) {
+            await app.vault.createFolder(folderPath);
+        }
+
+        // Get item details
+        const statusCol = item.column_values.find(cv => {
+            const col = boardData.columns.find(c => c.id === cv.id);
+            return col?.type === 'status';
+        });
+        const dateCol = item.column_values.find(cv => {
+            const col = boardData.columns.find(c => c.id === cv.id);
+            return col?.type === 'date';
+        });
+        const personCol = item.column_values.find(cv => {
+            const col = boardData.columns.find(c => c.id === cv.id);
+            return col?.type === 'person' || col?.type === 'people';
+        });
+
+        // Find board URL
+        const board = plugin.settings.cachedBoards.find(b => b.id === this.selectedBoardId);
+
+        // Build frontmatter
+        const frontmatter: Record<string, string | string[]> = {
+            title: item.name,
+            monday_id: item.id,
+            monday_board: boardData.name,
+            monday_board_id: this.selectedBoardId || '',
+            status: statusCol?.text || '',
+            group: item.group?.title || '',
+            created: new Date().toISOString().split('T')[0],
+            tags: ['monday']
+        };
+
+        if (dateCol?.text) {
+            frontmatter['due_date'] = dateCol.text;
+        }
+        if (personCol?.text) {
+            frontmatter['assigned'] = personCol.text;
+        }
+
+        // Build note content
+        let content = '---\n';
+        for (const [key, value] of Object.entries(frontmatter)) {
+            if (Array.isArray(value)) {
+                content += `${key}:\n`;
+                for (const v of value) {
+                    content += `  - ${v}\n`;
+                }
+            } else if (value) {
+                content += `${key}: "${value}"\n`;
+            }
+        }
+        content += '---\n\n';
+        content += `# ${item.name}\n\n`;
+        content += `## Details\n\n`;
+        content += `- **Board:** ${boardData.name}\n`;
+        content += `- **Group:** ${item.group?.title || 'None'}\n`;
+        content += `- **Status:** ${statusCol?.text || 'None'}\n`;
+        if (dateCol?.text) {
+            content += `- **Due Date:** ${dateCol.text}\n`;
+        }
+        if (personCol?.text) {
+            content += `- **Assigned:** ${personCol.text}\n`;
+        }
+        content += `\n## Notes\n\n`;
+
+        // Create the file
+        const file = await app.vault.create(notePath, content);
+        await app.workspace.openLinkText(notePath, '', false);
+        new Notice(`Created note: ${file.basename}`);
     }
 
     private async refreshBoards() {
@@ -662,84 +990,58 @@ class MondayView extends ItemView {
         }
     }
 
-    private async renderBoardItems(parentContainer: Element) {
-        const container = parentContainer as HTMLElement;
-        let itemsContainer = container.querySelector('.monday-sidebar-items') as HTMLElement | null;
-        if (!itemsContainer) {
-            itemsContainer = container.createEl('div', { cls: 'monday-sidebar-items' });
-        }
-        itemsContainer.empty();
-
-        if (!this.selectedBoardId) return;
-
-        // Loading
-        itemsContainer.createEl('div', { text: 'Loading items...', cls: 'monday-sidebar-loading' });
-
-        try {
-            const boardData = await this.plugin.apiClient.getBoardData(this.selectedBoardId, 50);
-            itemsContainer.empty();
-
-            if (!boardData) {
-                itemsContainer.createEl('p', { text: 'Board not found.' });
-                return;
-            }
-
-            if (boardData.items.length === 0) {
-                itemsContainer.createEl('p', { text: 'No items in this board.' });
-                return;
-            }
-
-            // Group items by group
-            const groupedItems = new Map<string, Item[]>();
-            for (const item of boardData.items) {
-                const groupName = item.group?.title || 'No Group';
-                if (!groupedItems.has(groupName)) {
-                    groupedItems.set(groupName, []);
-                }
-                groupedItems.get(groupName)!.push(item);
-            }
-
-            // Render grouped items
-            for (const [groupName, items] of groupedItems) {
-                const groupEl = itemsContainer.createEl('div', { cls: 'monday-sidebar-group' });
-                groupEl.createEl('div', { text: groupName, cls: 'monday-sidebar-group-title' });
-
-                for (const item of items) {
-                    const itemEl = groupEl.createEl('div', { cls: 'monday-sidebar-item' });
-                    itemEl.createEl('span', { text: item.name, cls: 'monday-sidebar-item-name' });
-
-                    // Find status column
-                    const statusCol = item.column_values.find(cv => {
-                        const col = boardData.columns.find(c => c.id === cv.id);
-                        return col?.type === 'status';
-                    });
-                    if (statusCol?.text) {
-                        const statusBadge = itemEl.createEl('span', {
-                            text: statusCol.text,
-                            cls: 'monday-sidebar-status'
-                        });
-                        try {
-                            const valueObj = statusCol.value ? JSON.parse(statusCol.value) : null;
-                            if (valueObj?.label_style?.color) {
-                                statusBadge.style.backgroundColor = valueObj.label_style.color;
-                            }
-                        } catch {
-                            // Use default
-                        }
-                    }
-                }
-            }
-        } catch (error) {
-            itemsContainer.empty();
-            itemsContainer.createEl('p', {
-                text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                cls: 'monday-sidebar-error'
-            });
-        }
-    }
-
     async onClose() {
         // Cleanup if needed
+    }
+}
+
+// ============================================================================
+// Duplicate Note Modal
+// ============================================================================
+
+class DuplicateNoteModal extends Modal {
+    private notePath: string;
+    private callback: (action: 'open' | 'create') => void;
+
+    constructor(app: App, notePath: string, callback: (action: 'open' | 'create') => void) {
+        super(app);
+        this.notePath = notePath;
+        this.callback = callback;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.addClass('monday-duplicate-modal');
+
+        contentEl.createEl('h3', { text: 'Note Already Exists' });
+        contentEl.createEl('p', { text: `A note already exists at:` });
+        contentEl.createEl('code', { text: this.notePath, cls: 'monday-modal-path' });
+        contentEl.createEl('p', { text: 'What would you like to do?' });
+
+        const buttonContainer = contentEl.createEl('div', { cls: 'monday-modal-buttons' });
+
+        const openBtn = buttonContainer.createEl('button', { text: 'Open Existing Note', cls: 'mod-cta' });
+        openBtn.addEventListener('click', () => {
+            this.callback('open');
+            this.close();
+        });
+
+        const createBtn = buttonContainer.createEl('button', { text: 'Create New Note' });
+        createBtn.addEventListener('click', () => {
+            this.callback('create');
+            this.close();
+        });
+
+        const cancelBtn = buttonContainer.createEl('button', { text: 'Cancel' });
+        cancelBtn.addEventListener('click', () => {
+            this.close();
+        });
+    }
+
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
     }
 }
 
@@ -940,6 +1242,43 @@ class MondaySettingTab extends PluginSettingTab {
                     this.plugin.settings.refreshInterval = num;
                     await this.plugin.saveSettings();
                 }));
+
+        // Note creation settings
+        new Setting(containerEl)
+            .setName('Note creation')
+            .setHeading();
+
+        new Setting(containerEl)
+            .setName('Note folder')
+            .setDesc('Folder where notes created from Monday.com items will be saved')
+            .addText(text => text
+                .setPlaceholder('Monday')
+                .setValue(this.plugin.settings.noteFolder)
+                .onChange(async (value) => {
+                    this.plugin.settings.noteFolder = value || 'Monday';
+                    await this.plugin.saveSettings();
+                }));
+
+        new Setting(containerEl)
+            .setName('Note name template')
+            .setDesc('Template for note names. Use {name}, {board}, {group}, {id} as placeholders')
+            .addText(text => {
+                text.inputEl.style.width = '200px';
+                return text
+                    .setPlaceholder('{name}')
+                    .setValue(this.plugin.settings.noteNameTemplate)
+                    .onChange(async (value) => {
+                        this.plugin.settings.noteNameTemplate = value || '{name}';
+                        await this.plugin.saveSettings();
+                    });
+            });
+
+        const templateExamples = containerEl.createEl('div', { cls: 'monday-template-examples' });
+        templateExamples.createEl('p', { text: 'Examples:', cls: 'monday-template-title' });
+        const exampleList = templateExamples.createEl('ul');
+        exampleList.createEl('li', { text: '{name} → "Fix login bug"' });
+        exampleList.createEl('li', { text: '{board}/{name} → "Project Alpha/Fix login bug"' });
+        exampleList.createEl('li', { text: '{group} - {name} → "Sprint 1 - Fix login bug"' });
 
         // Usage section
         new Setting(containerEl)
