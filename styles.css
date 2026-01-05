@@ -849,3 +849,82 @@
 .monday-comment-textarea::placeholder {
     color: var(--text-faint);
 }
+
+/* ----------------------------------------------------------------------------
+   Create Task Modal
+   ---------------------------------------------------------------------------- */
+
+.monday-create-task-modal {
+    padding: 0.5em;
+    min-width: 350px;
+}
+
+.monday-create-task-modal h3 {
+    margin: 0 0 1em 0;
+    color: var(--text-normal);
+}
+
+.monday-modal-field {
+    margin-bottom: 1em;
+}
+
+.monday-modal-field label {
+    display: block;
+    font-size: 0.85em;
+    font-weight: 500;
+    color: var(--text-muted);
+    margin-bottom: 0.3em;
+}
+
+.monday-task-name-input {
+    width: 100%;
+    padding: 0.6em 0.8em;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 0.95em;
+}
+
+.monday-task-name-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+}
+
+.monday-task-name-input::placeholder {
+    color: var(--text-faint);
+}
+
+.monday-board-dropdown,
+.monday-group-dropdown {
+    width: 100%;
+    padding: 0.5em 0.8em;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 0.9em;
+    cursor: pointer;
+}
+
+.monday-board-dropdown:focus,
+.monday-group-dropdown:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+}
+
+.monday-board-dropdown:disabled,
+.monday-group-dropdown:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.monday-create-task-modal .monday-modal-buttons {
+    margin-top: 1.5em;
+}
+
+.monday-create-task-modal .monday-modal-buttons button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}

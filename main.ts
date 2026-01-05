@@ -11,7 +11,9 @@ import {
     Modal,
     TFile,
     normalizePath,
-    Menu
+    Menu,
+    Editor,
+    MarkdownView
 } from 'obsidian';
 
 // ============================================================================
@@ -255,6 +257,49 @@ class MondayApiClient {
         } catch (error) {
             console.error('Failed to get status settings:', error);
             return [];
+        }
+    }
+
+    async getBoardGroups(boardId: string): Promise<{ id: string; title: string; color: string }[]> {
+        try {
+            const data = await this.query(`
+                query {
+                    boards(ids: [${boardId}]) {
+                        groups {
+                            id
+                            title
+                            color
+                        }
+                    }
+                }
+            `);
+
+            return data.boards?.[0]?.groups || [];
+        } catch (error) {
+            console.error('Failed to get board groups:', error);
+            return [];
+        }
+    }
+
+    async createItem(boardId: string, groupId: string, itemName: string): Promise<{ id: string; name: string } | null> {
+        try {
+            const data = await this.query(`
+                mutation {
+                    create_item(
+                        board_id: ${boardId},
+                        group_id: "${groupId}",
+                        item_name: ${JSON.stringify(itemName)}
+                    ) {
+                        id
+                        name
+                    }
+                }
+            `);
+
+            return data.create_item || null;
+        } catch (error) {
+            console.error('Failed to create item:', error);
+            throw error;
         }
     }
 }
@@ -1482,6 +1527,208 @@ class AddCommentModal extends Modal {
 }
 
 // ============================================================================
+// Create Task Modal
+// ============================================================================
+
+interface BoardGroup {
+    id: string;
+    title: string;
+    color: string;
+}
+
+class CreateTaskModal extends Modal {
+    private plugin: MondayIntegrationPlugin;
+    private initialText: string;
+    private selectedBoardId: string = '';
+    private selectedGroupId: string = '';
+    private groups: BoardGroup[] = [];
+    private taskNameInput: HTMLInputElement | null = null;
+    private groupDropdown: HTMLSelectElement | null = null;
+    private submitBtn: HTMLButtonElement | null = null;
+
+    constructor(app: App, plugin: MondayIntegrationPlugin, initialText: string = '') {
+        super(app);
+        this.plugin = plugin;
+        this.initialText = initialText;
+    }
+
+    async onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.addClass('monday-create-task-modal');
+
+        contentEl.createEl('h3', { text: 'Create Monday.com Task' });
+
+        // Task name input
+        const nameContainer = contentEl.createEl('div', { cls: 'monday-modal-field' });
+        nameContainer.createEl('label', { text: 'Task name' });
+        this.taskNameInput = nameContainer.createEl('input', {
+            type: 'text',
+            cls: 'monday-task-name-input',
+            value: this.initialText
+        });
+        this.taskNameInput.placeholder = 'Enter task name...';
+
+        // Board dropdown
+        const boardContainer = contentEl.createEl('div', { cls: 'monday-modal-field' });
+        boardContainer.createEl('label', { text: 'Board' });
+        const boardDropdown = boardContainer.createEl('select', { cls: 'monday-board-dropdown' });
+
+        const defaultBoardOption = boardDropdown.createEl('option', { text: 'Select a board...', value: '' });
+        defaultBoardOption.disabled = true;
+        defaultBoardOption.selected = true;
+
+        for (const board of this.plugin.settings.cachedBoards) {
+            const option = boardDropdown.createEl('option', { text: board.name, value: board.id });
+            if (board.id === this.plugin.settings.defaultBoardId) {
+                option.selected = true;
+                this.selectedBoardId = board.id;
+            }
+        }
+
+        boardDropdown.addEventListener('change', async () => {
+            this.selectedBoardId = boardDropdown.value;
+            await this.loadGroups();
+        });
+
+        // Group dropdown
+        const groupContainer = contentEl.createEl('div', { cls: 'monday-modal-field' });
+        groupContainer.createEl('label', { text: 'Group' });
+        this.groupDropdown = groupContainer.createEl('select', { cls: 'monday-group-dropdown' });
+        this.groupDropdown.disabled = true;
+
+        const defaultGroupOption = this.groupDropdown.createEl('option', { text: 'Select a board first...', value: '' });
+        defaultGroupOption.disabled = true;
+        defaultGroupOption.selected = true;
+
+        this.groupDropdown.addEventListener('change', () => {
+            this.selectedGroupId = this.groupDropdown!.value;
+            this.updateSubmitButton();
+        });
+
+        // Load groups if default board is selected
+        if (this.selectedBoardId) {
+            await this.loadGroups();
+        }
+
+        // Buttons
+        const buttonContainer = contentEl.createEl('div', { cls: 'monday-modal-buttons' });
+
+        this.submitBtn = buttonContainer.createEl('button', { text: 'Create Task', cls: 'mod-cta' });
+        this.submitBtn.disabled = true;
+        this.submitBtn.addEventListener('click', () => void this.createTask());
+
+        const cancelBtn = buttonContainer.createEl('button', { text: 'Cancel' });
+        cancelBtn.addEventListener('click', () => this.close());
+
+        // Update submit button state when task name changes
+        this.taskNameInput.addEventListener('input', () => this.updateSubmitButton());
+
+        // Focus task name input
+        setTimeout(() => this.taskNameInput?.focus(), 50);
+
+        // Initial button state
+        this.updateSubmitButton();
+    }
+
+    private async loadGroups() {
+        if (!this.groupDropdown || !this.selectedBoardId) return;
+
+        this.groupDropdown.empty();
+        const loadingOption = this.groupDropdown.createEl('option', { text: 'Loading groups...', value: '' });
+        loadingOption.disabled = true;
+        loadingOption.selected = true;
+        this.groupDropdown.disabled = true;
+        this.selectedGroupId = '';
+
+        try {
+            this.groups = await this.plugin.apiClient.getBoardGroups(this.selectedBoardId);
+
+            this.groupDropdown.empty();
+
+            if (this.groups.length === 0) {
+                const noGroupsOption = this.groupDropdown.createEl('option', { text: 'No groups found', value: '' });
+                noGroupsOption.disabled = true;
+                noGroupsOption.selected = true;
+            } else {
+                const selectOption = this.groupDropdown.createEl('option', { text: 'Select a group...', value: '' });
+                selectOption.disabled = true;
+                selectOption.selected = true;
+
+                for (const group of this.groups) {
+                    this.groupDropdown.createEl('option', { text: group.title, value: group.id });
+                }
+
+                this.groupDropdown.disabled = false;
+            }
+        } catch (error) {
+            this.groupDropdown.empty();
+            const errorOption = this.groupDropdown.createEl('option', { text: 'Error loading groups', value: '' });
+            errorOption.disabled = true;
+            errorOption.selected = true;
+            new Notice(`Failed to load groups: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+
+        this.updateSubmitButton();
+    }
+
+    private updateSubmitButton() {
+        if (!this.submitBtn || !this.taskNameInput) return;
+
+        const hasTaskName = this.taskNameInput.value.trim().length > 0;
+        const hasBoard = this.selectedBoardId.length > 0;
+        const hasGroup = this.selectedGroupId.length > 0;
+
+        this.submitBtn.disabled = !(hasTaskName && hasBoard && hasGroup);
+    }
+
+    private async createTask() {
+        if (!this.taskNameInput) return;
+
+        const taskName = this.taskNameInput.value.trim();
+        if (!taskName || !this.selectedBoardId || !this.selectedGroupId) {
+            new Notice('Please fill in all fields');
+            return;
+        }
+
+        if (this.submitBtn) {
+            this.submitBtn.disabled = true;
+            this.submitBtn.textContent = 'Creating...';
+        }
+
+        try {
+            const result = await this.plugin.apiClient.createItem(
+                this.selectedBoardId,
+                this.selectedGroupId,
+                taskName
+            );
+
+            if (result) {
+                new Notice(`Task created: ${result.name}`);
+                this.close();
+            } else {
+                new Notice('Failed to create task');
+                if (this.submitBtn) {
+                    this.submitBtn.disabled = false;
+                    this.submitBtn.textContent = 'Create Task';
+                }
+            }
+        } catch (error) {
+            new Notice(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            if (this.submitBtn) {
+                this.submitBtn.disabled = false;
+                this.submitBtn.textContent = 'Create Task';
+            }
+        }
+    }
+
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
+    }
+}
+
+// ============================================================================
 // Status Bar
 // ============================================================================
 
@@ -1855,6 +2102,43 @@ export default class MondayIntegrationPlugin extends Plugin {
                 }
             }
         });
+
+        // Command to create a Monday.com task from selection or prompt
+        this.addCommand({
+            id: 'create-monday-task',
+            name: 'Create Monday.com task',
+            editorCallback: (editor: Editor) => {
+                if (!this.settings.apiToken) {
+                    new Notice('Please configure your Monday.com API token first');
+                    return;
+                }
+                if (this.settings.cachedBoards.length === 0) {
+                    new Notice('Please load your Monday.com boards first (Settings > Monday.com Integration)');
+                    return;
+                }
+                const selection = editor.getSelection();
+                new CreateTaskModal(this.app, this, selection).open();
+            }
+        });
+
+        // Register editor context menu (right-click)
+        this.registerEvent(
+            this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {
+                if (!this.settings.apiToken || this.settings.cachedBoards.length === 0) {
+                    return; // Don't show menu item if not configured
+                }
+
+                const selection = editor.getSelection();
+
+                menu.addItem((item) => {
+                    item.setTitle(selection ? 'Create Monday.com task from selection' : 'Create Monday.com task')
+                        .setIcon('calendar-check')
+                        .onClick(() => {
+                            new CreateTaskModal(this.app, this, selection).open();
+                        });
+                });
+            })
+        );
 
         // Add settings tab
         this.addSettingTab(new MondaySettingTab(this.app, this));

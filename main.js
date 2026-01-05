@@ -183,6 +183,46 @@ var MondayApiClient = class {
       return [];
     }
   }
+  async getBoardGroups(boardId) {
+    var _a, _b;
+    try {
+      const data = await this.query(`
+                query {
+                    boards(ids: [${boardId}]) {
+                        groups {
+                            id
+                            title
+                            color
+                        }
+                    }
+                }
+            `);
+      return ((_b = (_a = data.boards) == null ? void 0 : _a[0]) == null ? void 0 : _b.groups) || [];
+    } catch (error) {
+      console.error("Failed to get board groups:", error);
+      return [];
+    }
+  }
+  async createItem(boardId, groupId, itemName) {
+    try {
+      const data = await this.query(`
+                mutation {
+                    create_item(
+                        board_id: ${boardId},
+                        group_id: "${groupId}",
+                        item_name: ${JSON.stringify(itemName)}
+                    ) {
+                        id
+                        name
+                    }
+                }
+            `);
+      return data.create_item || null;
+    } catch (error) {
+      console.error("Failed to create item:", error);
+      throw error;
+    }
+  }
 };
 var MondayDashboardRenderer = class extends import_obsidian.MarkdownRenderChild {
   constructor(containerEl, plugin, options) {
@@ -1115,6 +1155,158 @@ var AddCommentModal = class extends import_obsidian.Modal {
     contentEl.empty();
   }
 };
+var CreateTaskModal = class extends import_obsidian.Modal {
+  constructor(app, plugin, initialText = "") {
+    super(app);
+    this.selectedBoardId = "";
+    this.selectedGroupId = "";
+    this.groups = [];
+    this.taskNameInput = null;
+    this.groupDropdown = null;
+    this.submitBtn = null;
+    this.plugin = plugin;
+    this.initialText = initialText;
+  }
+  async onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("monday-create-task-modal");
+    contentEl.createEl("h3", { text: "Create Monday.com Task" });
+    const nameContainer = contentEl.createEl("div", { cls: "monday-modal-field" });
+    nameContainer.createEl("label", { text: "Task name" });
+    this.taskNameInput = nameContainer.createEl("input", {
+      type: "text",
+      cls: "monday-task-name-input",
+      value: this.initialText
+    });
+    this.taskNameInput.placeholder = "Enter task name...";
+    const boardContainer = contentEl.createEl("div", { cls: "monday-modal-field" });
+    boardContainer.createEl("label", { text: "Board" });
+    const boardDropdown = boardContainer.createEl("select", { cls: "monday-board-dropdown" });
+    const defaultBoardOption = boardDropdown.createEl("option", { text: "Select a board...", value: "" });
+    defaultBoardOption.disabled = true;
+    defaultBoardOption.selected = true;
+    for (const board of this.plugin.settings.cachedBoards) {
+      const option = boardDropdown.createEl("option", { text: board.name, value: board.id });
+      if (board.id === this.plugin.settings.defaultBoardId) {
+        option.selected = true;
+        this.selectedBoardId = board.id;
+      }
+    }
+    boardDropdown.addEventListener("change", async () => {
+      this.selectedBoardId = boardDropdown.value;
+      await this.loadGroups();
+    });
+    const groupContainer = contentEl.createEl("div", { cls: "monday-modal-field" });
+    groupContainer.createEl("label", { text: "Group" });
+    this.groupDropdown = groupContainer.createEl("select", { cls: "monday-group-dropdown" });
+    this.groupDropdown.disabled = true;
+    const defaultGroupOption = this.groupDropdown.createEl("option", { text: "Select a board first...", value: "" });
+    defaultGroupOption.disabled = true;
+    defaultGroupOption.selected = true;
+    this.groupDropdown.addEventListener("change", () => {
+      this.selectedGroupId = this.groupDropdown.value;
+      this.updateSubmitButton();
+    });
+    if (this.selectedBoardId) {
+      await this.loadGroups();
+    }
+    const buttonContainer = contentEl.createEl("div", { cls: "monday-modal-buttons" });
+    this.submitBtn = buttonContainer.createEl("button", { text: "Create Task", cls: "mod-cta" });
+    this.submitBtn.disabled = true;
+    this.submitBtn.addEventListener("click", () => void this.createTask());
+    const cancelBtn = buttonContainer.createEl("button", { text: "Cancel" });
+    cancelBtn.addEventListener("click", () => this.close());
+    this.taskNameInput.addEventListener("input", () => this.updateSubmitButton());
+    setTimeout(() => {
+      var _a;
+      return (_a = this.taskNameInput) == null ? void 0 : _a.focus();
+    }, 50);
+    this.updateSubmitButton();
+  }
+  async loadGroups() {
+    if (!this.groupDropdown || !this.selectedBoardId)
+      return;
+    this.groupDropdown.empty();
+    const loadingOption = this.groupDropdown.createEl("option", { text: "Loading groups...", value: "" });
+    loadingOption.disabled = true;
+    loadingOption.selected = true;
+    this.groupDropdown.disabled = true;
+    this.selectedGroupId = "";
+    try {
+      this.groups = await this.plugin.apiClient.getBoardGroups(this.selectedBoardId);
+      this.groupDropdown.empty();
+      if (this.groups.length === 0) {
+        const noGroupsOption = this.groupDropdown.createEl("option", { text: "No groups found", value: "" });
+        noGroupsOption.disabled = true;
+        noGroupsOption.selected = true;
+      } else {
+        const selectOption = this.groupDropdown.createEl("option", { text: "Select a group...", value: "" });
+        selectOption.disabled = true;
+        selectOption.selected = true;
+        for (const group of this.groups) {
+          this.groupDropdown.createEl("option", { text: group.title, value: group.id });
+        }
+        this.groupDropdown.disabled = false;
+      }
+    } catch (error) {
+      this.groupDropdown.empty();
+      const errorOption = this.groupDropdown.createEl("option", { text: "Error loading groups", value: "" });
+      errorOption.disabled = true;
+      errorOption.selected = true;
+      new import_obsidian.Notice(`Failed to load groups: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+    this.updateSubmitButton();
+  }
+  updateSubmitButton() {
+    if (!this.submitBtn || !this.taskNameInput)
+      return;
+    const hasTaskName = this.taskNameInput.value.trim().length > 0;
+    const hasBoard = this.selectedBoardId.length > 0;
+    const hasGroup = this.selectedGroupId.length > 0;
+    this.submitBtn.disabled = !(hasTaskName && hasBoard && hasGroup);
+  }
+  async createTask() {
+    if (!this.taskNameInput)
+      return;
+    const taskName = this.taskNameInput.value.trim();
+    if (!taskName || !this.selectedBoardId || !this.selectedGroupId) {
+      new import_obsidian.Notice("Please fill in all fields");
+      return;
+    }
+    if (this.submitBtn) {
+      this.submitBtn.disabled = true;
+      this.submitBtn.textContent = "Creating...";
+    }
+    try {
+      const result = await this.plugin.apiClient.createItem(
+        this.selectedBoardId,
+        this.selectedGroupId,
+        taskName
+      );
+      if (result) {
+        new import_obsidian.Notice(`Task created: ${result.name}`);
+        this.close();
+      } else {
+        new import_obsidian.Notice("Failed to create task");
+        if (this.submitBtn) {
+          this.submitBtn.disabled = false;
+          this.submitBtn.textContent = "Create Task";
+        }
+      }
+    } catch (error) {
+      new import_obsidian.Notice(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+      if (this.submitBtn) {
+        this.submitBtn.disabled = false;
+        this.submitBtn.textContent = "Create Task";
+      }
+    }
+  }
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
+  }
+};
 var StatusBarManager = class {
   constructor(plugin) {
     this.statusBarEl = null;
@@ -1356,6 +1548,35 @@ title: My Tasks
         }
       }
     });
+    this.addCommand({
+      id: "create-monday-task",
+      name: "Create Monday.com task",
+      editorCallback: (editor) => {
+        if (!this.settings.apiToken) {
+          new import_obsidian.Notice("Please configure your Monday.com API token first");
+          return;
+        }
+        if (this.settings.cachedBoards.length === 0) {
+          new import_obsidian.Notice("Please load your Monday.com boards first (Settings > Monday.com Integration)");
+          return;
+        }
+        const selection = editor.getSelection();
+        new CreateTaskModal(this.app, this, selection).open();
+      }
+    });
+    this.registerEvent(
+      this.app.workspace.on("editor-menu", (menu, editor, view) => {
+        if (!this.settings.apiToken || this.settings.cachedBoards.length === 0) {
+          return;
+        }
+        const selection = editor.getSelection();
+        menu.addItem((item) => {
+          item.setTitle(selection ? "Create Monday.com task from selection" : "Create Monday.com task").setIcon("calendar-check").onClick(() => {
+            new CreateTaskModal(this.app, this, selection).open();
+          });
+        });
+      })
+    );
     this.addSettingTab(new MondaySettingTab(this.app, this));
   }
   async activateView() {
