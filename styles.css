@@ -316,12 +316,14 @@
 }
 
 .monday-sidebar-group-title {
-    font-weight: 600;
-    font-size: 0.9em;
-    color: var(--text-muted);
+    font-weight: 700;
+    font-size: 0.95em;
+    color: var(--interactive-accent);
     margin-bottom: 0.5em;
-    padding-bottom: 0.3em;
-    border-bottom: 1px solid var(--background-modifier-border);
+    padding: 0.4em 0.5em;
+    background: var(--background-secondary);
+    border-radius: 4px;
+    border-left: 3px solid var(--interactive-accent);
 }
 
 .monday-sidebar-item {
