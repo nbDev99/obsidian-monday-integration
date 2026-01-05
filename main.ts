@@ -758,6 +758,7 @@ class MondayView extends ItemView {
 
         try {
             // Fetch board data if not cached
+            const isFirstLoad = !this.currentBoardData;
             if (!this.currentBoardData) {
                 this.currentBoardData = await this.plugin.apiClient.getBoardData(this.selectedBoardId, 100);
 
@@ -769,6 +770,21 @@ class MondayView extends ItemView {
                         if (statuses.length > 0) {
                             this.availableStatuses.set(col.id, statuses);
                         }
+                    }
+                }
+            }
+
+            // Auto-exclude "Done" status on first load
+            if (isFirstLoad && this.currentBoardData) {
+                const statusColumns = this.currentBoardData.columns.filter(c => c.type === 'status');
+                for (const col of statusColumns) {
+                    const statuses = this.availableStatuses.get(col.id) || [];
+                    // Find "Done" status (case-insensitive)
+                    const doneStatus = statuses.find(s => s.toLowerCase() === 'done');
+                    if (doneStatus) {
+                        this.statusFilter.selected.add(doneStatus);
+                        this.statusFilter.mode = 'exclude';
+                        break;
                     }
                 }
             }

@@ -553,6 +553,7 @@ var MondayView = class extends import_obsidian.ItemView {
       itemsContainer.createEl("div", { text: "Loading items...", cls: "monday-sidebar-loading" });
     }
     try {
+      const isFirstLoad = !this.currentBoardData;
       if (!this.currentBoardData) {
         this.currentBoardData = await this.plugin.apiClient.getBoardData(this.selectedBoardId, 100);
         if (this.currentBoardData) {
@@ -562,6 +563,18 @@ var MondayView = class extends import_obsidian.ItemView {
             if (statuses.length > 0) {
               this.availableStatuses.set(col.id, statuses);
             }
+          }
+        }
+      }
+      if (isFirstLoad && this.currentBoardData) {
+        const statusColumns = this.currentBoardData.columns.filter((c) => c.type === "status");
+        for (const col of statusColumns) {
+          const statuses = this.availableStatuses.get(col.id) || [];
+          const doneStatus = statuses.find((s) => s.toLowerCase() === "done");
+          if (doneStatus) {
+            this.statusFilter.selected.add(doneStatus);
+            this.statusFilter.mode = "exclude";
+            break;
           }
         }
       }
