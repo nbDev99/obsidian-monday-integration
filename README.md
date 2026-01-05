@@ -77,11 +77,19 @@ Click the calendar-check icon in the left ribbon or use the command palette:
 
 If this plugin helps you stay organised, consider [buying me a coffee](https://buymeacoffee.com/maframpton)!
 
-## Privacy
+## Security & Privacy
 
-- Your API token is stored locally in your vault
-- Data is fetched directly from Monday.com's API
-- No data is sent to third-party servers
+- **Local storage only** - Your API token is stored locally in your vault's plugin data folder (`data.json`)
+- **No encryption at rest** - The token is stored in plain text (standard for Obsidian plugins)
+- **Direct API communication** - Data is fetched directly from Monday.com's API
+- **No third-party servers** - Your data is never sent anywhere except Monday.com
+- **Masked input** - The token input field is masked in settings
+- **No logging** - Your token is never logged or exposed
+
+**Recommendations:**
+- Use a Monday.com API token with minimal required permissions
+- Do not sync your vault's `data.json` files to public repositories
+- Consider adding `.obsidian/plugins/*/data.json` to your `.gitignore`
 
 ## Licence
 
