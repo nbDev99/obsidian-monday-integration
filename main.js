@@ -34,6 +34,7 @@ var DEFAULT_SETTINGS = {
   defaultBoardId: "",
   refreshInterval: 5,
   showStatusBar: true,
+  showStatusDropdown: true,
   cachedBoards: [],
   lastSync: 0,
   noteFolder: "Monday",
@@ -787,7 +788,7 @@ var MondayView = class extends import_obsidian.ItemView {
         const statusColumn = boardData.columns.find((c) => c.type === "status");
         const statusColValue = statusColumn ? item.column_values.find((cv) => cv.id === statusColumn.id) : null;
         const currentStatus = (statusColValue == null ? void 0 : statusColValue.text) || "";
-        if (statusColumn && this.availableStatuses.has(statusColumn.id)) {
+        if (this.plugin.settings.showStatusDropdown && statusColumn && this.availableStatuses.has(statusColumn.id)) {
           const statusOptions = this.availableStatuses.get(statusColumn.id) || [];
           const statusDropdown = actionsEl.createEl("select", { cls: "monday-status-dropdown" });
           statusDropdown.title = "Change status";
@@ -1218,6 +1219,10 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
       } else {
         this.plugin.statusBar.disable();
       }
+    }));
+    new import_obsidian.Setting(containerEl).setName("Show status dropdown").setDesc("Display quick status change dropdown on sidebar items").addToggle((toggle) => toggle.setValue(this.plugin.settings.showStatusDropdown).onChange(async (value) => {
+      this.plugin.settings.showStatusDropdown = value;
+      await this.plugin.saveSettings();
     }));
     new import_obsidian.Setting(containerEl).setName("Auto-refresh interval").setDesc("How often to refresh data in minutes (0 to disable)").addText((text) => text.setPlaceholder("5").setValue(this.plugin.settings.refreshInterval.toString()).onChange(async (value) => {
       const num = parseInt(value) || 0;

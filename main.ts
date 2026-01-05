@@ -30,6 +30,7 @@ interface MondayIntegrationSettings {
     defaultBoardId: string;
     refreshInterval: number; // minutes
     showStatusBar: boolean;
+    showStatusDropdown: boolean; // show quick status dropdown in sidebar
     cachedBoards: Board[];
     lastSync: number; // timestamp
     noteFolder: string; // folder for created notes
@@ -94,6 +95,7 @@ const DEFAULT_SETTINGS: MondayIntegrationSettings = {
     defaultBoardId: '',
     refreshInterval: 5,
     showStatusBar: true,
+    showStatusDropdown: true,
     cachedBoards: [],
     lastSync: 0,
     noteFolder: 'Monday',
@@ -1061,8 +1063,8 @@ class MondayView extends ItemView {
                 const statusColValue = statusColumn ? item.column_values.find(cv => cv.id === statusColumn.id) : null;
                 const currentStatus = statusColValue?.text || '';
 
-                // Quick status dropdown
-                if (statusColumn && this.availableStatuses.has(statusColumn.id)) {
+                // Quick status dropdown (if enabled in settings)
+                if (this.plugin.settings.showStatusDropdown && statusColumn && this.availableStatuses.has(statusColumn.id)) {
                     const statusOptions = this.availableStatuses.get(statusColumn.id) || [];
                     const statusDropdown = actionsEl.createEl('select', { cls: 'monday-status-dropdown' });
                     statusDropdown.title = 'Change status';
@@ -1647,6 +1649,16 @@ class MondaySettingTab extends PluginSettingTab {
                     } else {
                         this.plugin.statusBar.disable();
                     }
+                }));
+
+        new Setting(containerEl)
+            .setName('Show status dropdown')
+            .setDesc('Display quick status change dropdown on sidebar items')
+            .addToggle(toggle => toggle
+                .setValue(this.plugin.settings.showStatusDropdown)
+                .onChange(async (value) => {
+                    this.plugin.settings.showStatusDropdown = value;
+                    await this.plugin.saveSettings();
                 }));
 
         new Setting(containerEl)
