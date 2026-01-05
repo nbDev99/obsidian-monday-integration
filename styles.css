@@ -504,33 +504,98 @@
 .monday-sidebar-filters {
     display: flex;
     flex-direction: column;
-    gap: 0.5em;
+    gap: 0.8em;
     margin-bottom: 1em;
-    padding: 0.5em;
-    background: var(--background-secondary);
-    border-radius: 6px;
 }
 
-.monday-filter-row {
+.monday-filter-section {
+    background: var(--background-secondary);
+    border-radius: 6px;
+    padding: 0.5em;
+}
+
+.monday-filter-header {
     display: flex;
     align-items: center;
     gap: 0.5em;
+    margin-bottom: 0.5em;
+    padding-bottom: 0.4em;
+    border-bottom: 1px solid var(--background-modifier-border);
 }
 
-.monday-filter-label {
+.monday-filter-title {
+    font-weight: 600;
     font-size: 0.85em;
-    color: var(--text-muted);
-    min-width: 50px;
+    color: var(--text-normal);
+    flex: 1;
 }
 
-.monday-filter-select {
-    flex: 1;
-    padding: 0.3em 0.5em;
-    border-radius: 4px;
+.monday-filter-mode {
+    font-size: 0.7em;
+    padding: 0.2em 0.5em;
+    border-radius: 3px;
+    border: none;
+    cursor: pointer;
+    font-weight: 500;
+}
+
+.monday-filter-mode.include {
+    background: var(--interactive-accent);
+    color: var(--text-on-accent);
+}
+
+.monday-filter-mode.exclude {
+    background: #e74c3c;
+    color: white;
+}
+
+.monday-filter-clear {
+    font-size: 0.7em;
+    padding: 0.2em 0.4em;
+    border-radius: 3px;
     border: 1px solid var(--background-modifier-border);
     background: var(--background-primary);
+    color: var(--text-muted);
+    cursor: pointer;
+}
+
+.monday-filter-clear:hover {
+    background: var(--background-modifier-hover);
     color: var(--text-normal);
+}
+
+.monday-filter-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3em;
+    max-height: 150px;
+    overflow-y: auto;
+}
+
+.monday-filter-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    padding: 0.25em 0.3em;
+    border-radius: 3px;
+    cursor: pointer;
     font-size: 0.85em;
+    color: var(--text-normal);
+}
+
+.monday-filter-checkbox:hover {
+    background: var(--background-modifier-hover);
+}
+
+.monday-filter-checkbox input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.monday-filter-checkbox span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 /* Clickable sidebar items */

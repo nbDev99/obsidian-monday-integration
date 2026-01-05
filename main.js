@@ -404,14 +404,12 @@ function parseDashboardOptions(source) {
   return options;
 }
 var MondayView = class extends import_obsidian.ItemView {
-  // empty = all
   constructor(leaf, plugin) {
     super(leaf);
     this.selectedBoardId = null;
     this.currentBoardData = null;
-    this.statusFilter = "";
-    // empty = all
-    this.groupFilter = "";
+    this.statusFilter = { selected: /* @__PURE__ */ new Set(), mode: "include" };
+    this.groupFilter = { selected: /* @__PURE__ */ new Set(), mode: "include" };
     this.plugin = plugin;
   }
   getViewType() {
@@ -465,8 +463,8 @@ var MondayView = class extends import_obsidian.ItemView {
     }
     selectEl.addEventListener("change", (e) => {
       this.selectedBoardId = e.target.value;
-      this.statusFilter = "";
-      this.groupFilter = "";
+      this.statusFilter = { selected: /* @__PURE__ */ new Set(), mode: "include" };
+      this.groupFilter = { selected: /* @__PURE__ */ new Set(), mode: "include" };
       this.currentBoardData = null;
       void this.loadAndRenderBoard(container);
     });
@@ -532,64 +530,125 @@ var MondayView = class extends import_obsidian.ItemView {
         groups.add(item.group.title);
       }
     }
-    if (statuses.size > 0) {
-      const statusFilterEl = container.createEl("div", { cls: "monday-filter-row" });
-      statusFilterEl.createEl("label", { text: "Status:", cls: "monday-filter-label" });
-      const statusSelect = statusFilterEl.createEl("select", { cls: "monday-filter-select" });
-      statusSelect.createEl("option", { text: "All statuses", value: "" });
-      for (const status of Array.from(statuses).sort()) {
-        const opt = statusSelect.createEl("option", { text: status, value: status });
-        if (status === this.statusFilter)
-          opt.selected = true;
+    const refreshItems = () => {
+      var _a2;
+      const itemsContainer = (_a2 = container.parentElement) == null ? void 0 : _a2.querySelector(".monday-sidebar-items");
+      if (itemsContainer && this.currentBoardData) {
+        this.renderFilteredItems(itemsContainer, this.currentBoardData);
       }
-      statusSelect.addEventListener("change", (e) => {
-        var _a2;
-        this.statusFilter = e.target.value;
-        const itemsContainer = (_a2 = container.parentElement) == null ? void 0 : _a2.querySelector(".monday-sidebar-items");
-        if (itemsContainer && this.currentBoardData) {
-          this.renderFilteredItems(itemsContainer, this.currentBoardData);
-        }
+    };
+    if (statuses.size > 0) {
+      const statusSection = container.createEl("div", { cls: "monday-filter-section" });
+      const statusHeader = statusSection.createEl("div", { cls: "monday-filter-header" });
+      statusHeader.createEl("span", { text: "Status", cls: "monday-filter-title" });
+      const statusModeBtn = statusHeader.createEl("button", {
+        cls: `monday-filter-mode ${this.statusFilter.mode}`,
+        text: this.statusFilter.mode === "include" ? "Show" : "Hide"
       });
+      statusModeBtn.title = this.statusFilter.mode === "include" ? "Show only selected (click to switch to Hide mode)" : "Hide selected (click to switch to Show mode)";
+      statusModeBtn.addEventListener("click", () => {
+        this.statusFilter.mode = this.statusFilter.mode === "include" ? "exclude" : "include";
+        statusModeBtn.textContent = this.statusFilter.mode === "include" ? "Show" : "Hide";
+        statusModeBtn.className = `monday-filter-mode ${this.statusFilter.mode}`;
+        statusModeBtn.title = this.statusFilter.mode === "include" ? "Show only selected (click to switch to Hide mode)" : "Hide selected (click to switch to Show mode)";
+        refreshItems();
+      });
+      const statusClearBtn = statusHeader.createEl("button", {
+        cls: "monday-filter-clear",
+        text: "Clear"
+      });
+      statusClearBtn.addEventListener("click", () => {
+        this.statusFilter.selected.clear();
+        statusSection.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+          cb.checked = false;
+        });
+        refreshItems();
+      });
+      const statusList = statusSection.createEl("div", { cls: "monday-filter-list" });
+      for (const status of Array.from(statuses).sort()) {
+        const label = statusList.createEl("label", { cls: "monday-filter-checkbox" });
+        const checkbox = label.createEl("input", { type: "checkbox" });
+        checkbox.checked = this.statusFilter.selected.has(status);
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) {
+            this.statusFilter.selected.add(status);
+          } else {
+            this.statusFilter.selected.delete(status);
+          }
+          refreshItems();
+        });
+        label.createEl("span", { text: status });
+      }
     }
     if (groups.size > 0) {
-      const groupFilterEl = container.createEl("div", { cls: "monday-filter-row" });
-      groupFilterEl.createEl("label", { text: "Group:", cls: "monday-filter-label" });
-      const groupSelect = groupFilterEl.createEl("select", { cls: "monday-filter-select" });
-      groupSelect.createEl("option", { text: "All groups", value: "" });
-      for (const group of Array.from(groups).sort()) {
-        const opt = groupSelect.createEl("option", { text: group, value: group });
-        if (group === this.groupFilter)
-          opt.selected = true;
-      }
-      groupSelect.addEventListener("change", (e) => {
-        var _a2;
-        this.groupFilter = e.target.value;
-        const itemsContainer = (_a2 = container.parentElement) == null ? void 0 : _a2.querySelector(".monday-sidebar-items");
-        if (itemsContainer && this.currentBoardData) {
-          this.renderFilteredItems(itemsContainer, this.currentBoardData);
-        }
+      const groupSection = container.createEl("div", { cls: "monday-filter-section" });
+      const groupHeader = groupSection.createEl("div", { cls: "monday-filter-header" });
+      groupHeader.createEl("span", { text: "Group", cls: "monday-filter-title" });
+      const groupModeBtn = groupHeader.createEl("button", {
+        cls: `monday-filter-mode ${this.groupFilter.mode}`,
+        text: this.groupFilter.mode === "include" ? "Show" : "Hide"
       });
+      groupModeBtn.title = this.groupFilter.mode === "include" ? "Show only selected (click to switch to Hide mode)" : "Hide selected (click to switch to Show mode)";
+      groupModeBtn.addEventListener("click", () => {
+        this.groupFilter.mode = this.groupFilter.mode === "include" ? "exclude" : "include";
+        groupModeBtn.textContent = this.groupFilter.mode === "include" ? "Show" : "Hide";
+        groupModeBtn.className = `monday-filter-mode ${this.groupFilter.mode}`;
+        groupModeBtn.title = this.groupFilter.mode === "include" ? "Show only selected (click to switch to Hide mode)" : "Hide selected (click to switch to Show mode)";
+        refreshItems();
+      });
+      const groupClearBtn = groupHeader.createEl("button", {
+        cls: "monday-filter-clear",
+        text: "Clear"
+      });
+      groupClearBtn.addEventListener("click", () => {
+        this.groupFilter.selected.clear();
+        groupSection.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+          cb.checked = false;
+        });
+        refreshItems();
+      });
+      const groupList = groupSection.createEl("div", { cls: "monday-filter-list" });
+      for (const group of Array.from(groups).sort()) {
+        const label = groupList.createEl("label", { cls: "monday-filter-checkbox" });
+        const checkbox = label.createEl("input", { type: "checkbox" });
+        checkbox.checked = this.groupFilter.selected.has(group);
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked) {
+            this.groupFilter.selected.add(group);
+          } else {
+            this.groupFilter.selected.delete(group);
+          }
+          refreshItems();
+        });
+        label.createEl("span", { text: group });
+      }
     }
   }
   renderFilteredItems(container, boardData) {
     var _a, _b;
     container.empty();
     let filteredItems = boardData.items;
-    if (this.statusFilter) {
+    if (this.statusFilter.selected.size > 0) {
       const statusColumns = boardData.columns.filter((c) => c.type === "status");
       filteredItems = filteredItems.filter((item) => {
+        let itemStatus = "";
         for (const statusCol of statusColumns) {
           const colValue = item.column_values.find((cv) => cv.id === statusCol.id);
-          if ((colValue == null ? void 0 : colValue.text) === this.statusFilter)
-            return true;
+          if (colValue == null ? void 0 : colValue.text) {
+            itemStatus = colValue.text;
+            break;
+          }
         }
-        return false;
+        const isSelected = this.statusFilter.selected.has(itemStatus);
+        return this.statusFilter.mode === "include" ? isSelected : !isSelected;
       });
     }
-    if (this.groupFilter) {
+    if (this.groupFilter.selected.size > 0) {
       filteredItems = filteredItems.filter((item) => {
         var _a2;
-        return ((_a2 = item.group) == null ? void 0 : _a2.title) === this.groupFilter;
+        const itemGroup = ((_a2 = item.group) == null ? void 0 : _a2.title) || "";
+        const isSelected = this.groupFilter.selected.has(itemGroup);
+        return this.groupFilter.mode === "include" ? isSelected : !isSelected;
       });
     }
     if (filteredItems.length === 0) {

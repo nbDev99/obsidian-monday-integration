@@ -569,12 +569,17 @@ function parseDashboardOptions(source: string): DashboardOptions {
 // Sidebar View
 // ============================================================================
 
+interface SidebarFilter {
+    selected: Set<string>;  // Selected values
+    mode: 'include' | 'exclude';  // Show only selected vs hide selected
+}
+
 class MondayView extends ItemView {
     private plugin: MondayIntegrationPlugin;
     private selectedBoardId: string | null = null;
     private currentBoardData: BoardData | null = null;
-    private statusFilter: string = ''; // empty = all
-    private groupFilter: string = ''; // empty = all
+    private statusFilter: SidebarFilter = { selected: new Set(), mode: 'include' };
+    private groupFilter: SidebarFilter = { selected: new Set(), mode: 'include' };
 
     constructor(leaf: WorkspaceLeaf, plugin: MondayIntegrationPlugin) {
         super(leaf);
@@ -649,8 +654,8 @@ class MondayView extends ItemView {
 
         selectEl.addEventListener('change', (e) => {
             this.selectedBoardId = (e.target as HTMLSelectElement).value;
-            this.statusFilter = '';
-            this.groupFilter = '';
+            this.statusFilter = { selected: new Set(), mode: 'include' };
+            this.groupFilter = { selected: new Set(), mode: 'include' };
             this.currentBoardData = null;
             void this.loadAndRenderBoard(container);
         });
@@ -735,42 +740,123 @@ class MondayView extends ItemView {
             }
         }
 
-        // Status filter dropdown
-        if (statuses.size > 0) {
-            const statusFilterEl = container.createEl('div', { cls: 'monday-filter-row' });
-            statusFilterEl.createEl('label', { text: 'Status:', cls: 'monday-filter-label' });
-            const statusSelect = statusFilterEl.createEl('select', { cls: 'monday-filter-select' });
-            statusSelect.createEl('option', { text: 'All statuses', value: '' });
-            for (const status of Array.from(statuses).sort()) {
-                const opt = statusSelect.createEl('option', { text: status, value: status });
-                if (status === this.statusFilter) opt.selected = true;
+        const refreshItems = () => {
+            const itemsContainer = container.parentElement?.querySelector('.monday-sidebar-items') as HTMLElement;
+            if (itemsContainer && this.currentBoardData) {
+                this.renderFilteredItems(itemsContainer, this.currentBoardData);
             }
-            statusSelect.addEventListener('change', (e) => {
-                this.statusFilter = (e.target as HTMLSelectElement).value;
-                const itemsContainer = container.parentElement?.querySelector('.monday-sidebar-items') as HTMLElement;
-                if (itemsContainer && this.currentBoardData) {
-                    this.renderFilteredItems(itemsContainer, this.currentBoardData);
-                }
+        };
+
+        // Status filter checkboxes
+        if (statuses.size > 0) {
+            const statusSection = container.createEl('div', { cls: 'monday-filter-section' });
+
+            // Header with mode toggle
+            const statusHeader = statusSection.createEl('div', { cls: 'monday-filter-header' });
+            statusHeader.createEl('span', { text: 'Status', cls: 'monday-filter-title' });
+
+            const statusModeBtn = statusHeader.createEl('button', {
+                cls: `monday-filter-mode ${this.statusFilter.mode}`,
+                text: this.statusFilter.mode === 'include' ? 'Show' : 'Hide'
             });
+            statusModeBtn.title = this.statusFilter.mode === 'include'
+                ? 'Show only selected (click to switch to Hide mode)'
+                : 'Hide selected (click to switch to Show mode)';
+            statusModeBtn.addEventListener('click', () => {
+                this.statusFilter.mode = this.statusFilter.mode === 'include' ? 'exclude' : 'include';
+                statusModeBtn.textContent = this.statusFilter.mode === 'include' ? 'Show' : 'Hide';
+                statusModeBtn.className = `monday-filter-mode ${this.statusFilter.mode}`;
+                statusModeBtn.title = this.statusFilter.mode === 'include'
+                    ? 'Show only selected (click to switch to Hide mode)'
+                    : 'Hide selected (click to switch to Show mode)';
+                refreshItems();
+            });
+
+            // Clear button
+            const statusClearBtn = statusHeader.createEl('button', {
+                cls: 'monday-filter-clear',
+                text: 'Clear'
+            });
+            statusClearBtn.addEventListener('click', () => {
+                this.statusFilter.selected.clear();
+                statusSection.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+                    (cb as HTMLInputElement).checked = false;
+                });
+                refreshItems();
+            });
+
+            // Checkbox list
+            const statusList = statusSection.createEl('div', { cls: 'monday-filter-list' });
+            for (const status of Array.from(statuses).sort()) {
+                const label = statusList.createEl('label', { cls: 'monday-filter-checkbox' });
+                const checkbox = label.createEl('input', { type: 'checkbox' });
+                checkbox.checked = this.statusFilter.selected.has(status);
+                checkbox.addEventListener('change', () => {
+                    if (checkbox.checked) {
+                        this.statusFilter.selected.add(status);
+                    } else {
+                        this.statusFilter.selected.delete(status);
+                    }
+                    refreshItems();
+                });
+                label.createEl('span', { text: status });
+            }
         }
 
-        // Group filter dropdown
+        // Group filter checkboxes
         if (groups.size > 0) {
-            const groupFilterEl = container.createEl('div', { cls: 'monday-filter-row' });
-            groupFilterEl.createEl('label', { text: 'Group:', cls: 'monday-filter-label' });
-            const groupSelect = groupFilterEl.createEl('select', { cls: 'monday-filter-select' });
-            groupSelect.createEl('option', { text: 'All groups', value: '' });
-            for (const group of Array.from(groups).sort()) {
-                const opt = groupSelect.createEl('option', { text: group, value: group });
-                if (group === this.groupFilter) opt.selected = true;
-            }
-            groupSelect.addEventListener('change', (e) => {
-                this.groupFilter = (e.target as HTMLSelectElement).value;
-                const itemsContainer = container.parentElement?.querySelector('.monday-sidebar-items') as HTMLElement;
-                if (itemsContainer && this.currentBoardData) {
-                    this.renderFilteredItems(itemsContainer, this.currentBoardData);
-                }
+            const groupSection = container.createEl('div', { cls: 'monday-filter-section' });
+
+            // Header with mode toggle
+            const groupHeader = groupSection.createEl('div', { cls: 'monday-filter-header' });
+            groupHeader.createEl('span', { text: 'Group', cls: 'monday-filter-title' });
+
+            const groupModeBtn = groupHeader.createEl('button', {
+                cls: `monday-filter-mode ${this.groupFilter.mode}`,
+                text: this.groupFilter.mode === 'include' ? 'Show' : 'Hide'
             });
+            groupModeBtn.title = this.groupFilter.mode === 'include'
+                ? 'Show only selected (click to switch to Hide mode)'
+                : 'Hide selected (click to switch to Show mode)';
+            groupModeBtn.addEventListener('click', () => {
+                this.groupFilter.mode = this.groupFilter.mode === 'include' ? 'exclude' : 'include';
+                groupModeBtn.textContent = this.groupFilter.mode === 'include' ? 'Show' : 'Hide';
+                groupModeBtn.className = `monday-filter-mode ${this.groupFilter.mode}`;
+                groupModeBtn.title = this.groupFilter.mode === 'include'
+                    ? 'Show only selected (click to switch to Hide mode)'
+                    : 'Hide selected (click to switch to Show mode)';
+                refreshItems();
+            });
+
+            // Clear button
+            const groupClearBtn = groupHeader.createEl('button', {
+                cls: 'monday-filter-clear',
+                text: 'Clear'
+            });
+            groupClearBtn.addEventListener('click', () => {
+                this.groupFilter.selected.clear();
+                groupSection.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+                    (cb as HTMLInputElement).checked = false;
+                });
+                refreshItems();
+            });
+
+            // Checkbox list
+            const groupList = groupSection.createEl('div', { cls: 'monday-filter-list' });
+            for (const group of Array.from(groups).sort()) {
+                const label = groupList.createEl('label', { cls: 'monday-filter-checkbox' });
+                const checkbox = label.createEl('input', { type: 'checkbox' });
+                checkbox.checked = this.groupFilter.selected.has(group);
+                checkbox.addEventListener('change', () => {
+                    if (checkbox.checked) {
+                        this.groupFilter.selected.add(group);
+                    } else {
+                        this.groupFilter.selected.delete(group);
+                    }
+                    refreshItems();
+                });
+                label.createEl('span', { text: group });
+            }
         }
     }
 
@@ -780,19 +866,36 @@ class MondayView extends ItemView {
         // Filter items
         let filteredItems = boardData.items;
 
-        if (this.statusFilter) {
+        // Apply status filter
+        if (this.statusFilter.selected.size > 0) {
             const statusColumns = boardData.columns.filter(c => c.type === 'status');
             filteredItems = filteredItems.filter(item => {
+                // Get item's status
+                let itemStatus = '';
                 for (const statusCol of statusColumns) {
                     const colValue = item.column_values.find(cv => cv.id === statusCol.id);
-                    if (colValue?.text === this.statusFilter) return true;
+                    if (colValue?.text) {
+                        itemStatus = colValue.text;
+                        break;
+                    }
                 }
-                return false;
+
+                const isSelected = this.statusFilter.selected.has(itemStatus);
+
+                // Include mode: show only selected
+                // Exclude mode: hide selected
+                return this.statusFilter.mode === 'include' ? isSelected : !isSelected;
             });
         }
 
-        if (this.groupFilter) {
-            filteredItems = filteredItems.filter(item => item.group?.title === this.groupFilter);
+        // Apply group filter
+        if (this.groupFilter.selected.size > 0) {
+            filteredItems = filteredItems.filter(item => {
+                const itemGroup = item.group?.title || '';
+                const isSelected = this.groupFilter.selected.has(itemGroup);
+
+                return this.groupFilter.mode === 'include' ? isSelected : !isSelected;
+            });
         }
 
         if (filteredItems.length === 0) {
