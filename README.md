@@ -89,7 +89,9 @@ Create Monday.com tasks directly from selected text in your notes:
 
 ## Support
 
-If this plugin helps you stay organised, consider [buying me a coffee](https://buymeacoffee.com/maframpton)!
+If this plugin helps you stay organised, consider supporting its development:
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/maframpton)
 
 ## Security & Privacy
 
