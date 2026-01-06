@@ -52,7 +52,9 @@ limit: 25
 ```
 ~~~
 
-![Embedded Dashboard](screenshots/notes-table.png)
+![Embedded Dashboard - Table View](screenshots/notes-table.png)
+
+![Embedded Dashboard - Cards View](screenshots/notes-table-2.png)
 
 **Options:**
 - `board` - Board ID (required if no default set)
