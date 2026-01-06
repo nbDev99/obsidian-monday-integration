@@ -1,6 +1,8 @@
-# Monday.com Integration for Obsidian
+# Monday.com Integration
 
-View your Monday.com boards and items directly within Obsidian notes and in a dedicated sidebar panel.
+View your Monday.com boards and items directly within your notes and in a dedicated sidebar panel.
+
+![Sidebar Panel](screenshots/sidebar-panel.png)
 
 ## Features
 
@@ -50,6 +52,8 @@ limit: 25
 ```
 ~~~
 
+![Embedded Dashboard](screenshots/notes-table.png)
+
 **Options:**
 - `board` - Board ID (required if no default set)
 - `title` - Custom title (optional)
@@ -60,6 +64,14 @@ limit: 25
 
 Click the calendar-check icon in the left ribbon or use the command palette:
 - `Monday.com Integration: Open sidebar`
+
+![Sidebar with Filters](screenshots/sidebar-filters.png)
+
+### Create Tasks
+
+Create Monday.com tasks directly from selected text in your notes:
+
+![Create Task Modal](screenshots/create-task.png)
 
 ### Commands
 
