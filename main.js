@@ -2463,10 +2463,10 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
     });
     usageEl.createEl("p", { text: "Options:" });
     const optionsList = usageEl.createEl("ul");
-    optionsList.createEl("li").setText("Use board to specify the board id (required if no default set)");
-    optionsList.createEl("li").setText("Use title for a custom title (optional)");
-    optionsList.createEl("li").setText("Use limit for max items to show (default 25)");
-    optionsList.createEl("li").setText("Use columns for column ids to display, comma-separated");
+    optionsList.createEl("li").setText("Use board to specify the board id, required if no default is set");
+    optionsList.createEl("li").setText("Use title to set a custom title for the display");
+    optionsList.createEl("li").setText("Use limit to set the maximum items shown, defaults to 25");
+    optionsList.createEl("li").setText("Use columns to specify which column ids to display");
     new import_obsidian.Setting(containerEl).setName("Support this plugin").setHeading();
     const supportEl = containerEl.createEl("div", { cls: "monday-support" });
     supportEl.createEl("p", {
