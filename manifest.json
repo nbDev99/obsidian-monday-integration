@@ -1,7 +1,7 @@
 {
     "id": "monday-integration",
     "name": "Monday.com Integration",
-    "version": "1.9.3",
+    "version": "1.9.4",
     "minAppVersion": "1.0.0",
     "description": "View Monday.com boards and items directly in your notes and sidebar.",
     "author": "MA Frampton",

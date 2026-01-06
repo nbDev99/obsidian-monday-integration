@@ -1507,7 +1507,7 @@ class MondayView extends ItemView {
                     // Add subtask button
                     const addSubtaskBtn = subitemsContainer.createEl('div', { cls: 'monday-add-subtask' });
                     addSubtaskBtn.createEl('span', { text: '└─', cls: 'monday-subitem-prefix' });
-                    addSubtaskBtn.createEl('span', { text: '+ Add subtask', cls: 'monday-add-subtask-text' });
+                    addSubtaskBtn.createEl('span', { text: '+ add subtask', cls: 'monday-add-subtask-text' });
                     addSubtaskBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
                         new CreateSubtaskModal(this.app, item.name, (subtaskName) => {
@@ -3056,7 +3056,7 @@ class CreateTaskModal extends Modal {
             new Notice(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
             if (this.submitBtn) {
                 this.submitBtn.disabled = false;
-                this.submitBtn.textContent = 'Create Task';
+                this.submitBtn.textContent = 'Create task';
             }
         }
     }
@@ -3327,10 +3327,10 @@ class MondaySettingTab extends PluginSettingTab {
 
         usageEl.createEl('p', { text: 'Options:' });
         const optionsList = usageEl.createEl('ul');
-        optionsList.createEl('li', { text: 'board: Board ID (required if no default set)' });
-        optionsList.createEl('li', { text: 'title: Custom title (optional)' });
-        optionsList.createEl('li', { text: 'limit: Max items to show (default: 25)' });
-        optionsList.createEl('li', { text: 'columns: Comma-separated column IDs to display' });
+        optionsList.createEl('li', { text: 'board: board ID (required if no default set)' });
+        optionsList.createEl('li', { text: 'title: custom title (optional)' });
+        optionsList.createEl('li', { text: 'limit: max items to show (default: 25)' });
+        optionsList.createEl('li', { text: 'columns: comma-separated column IDs to display' });
 
         // Support section
         new Setting(containerEl)
