@@ -434,7 +434,7 @@ var MondayDashboardRenderer = class extends import_obsidian.MarkdownRenderChild 
   renderLoading(container) {
     const loadingEl = container.createEl("div", { cls: "monday-loading" });
     loadingEl.createEl("div", { cls: "monday-spinner" });
-    loadingEl.createEl("div", { text: "Loading Monday.com data...", cls: "monday-loading-text" });
+    loadingEl.createEl("div", { text: "Loading data...", cls: "monday-loading-text" });
   }
   renderError(container, message) {
     const errorEl = container.createEl("div", { cls: "monday-error" });
@@ -1601,7 +1601,7 @@ var MondayView = class extends import_obsidian.ItemView {
   }
   async refreshBoards() {
     try {
-      new import_obsidian.Notice("Refreshing Monday.com boards...");
+      new import_obsidian.Notice("Refreshing boards...");
       const boards = await this.plugin.apiClient.getBoards();
       this.plugin.settings.cachedBoards = boards;
       this.plugin.settings.lastSync = Date.now();
@@ -2176,7 +2176,7 @@ var CreateTaskModal = class extends import_obsidian.Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("monday-create-task-modal");
-    contentEl.createEl("h3", { text: "Create Monday.com task" });
+    contentEl.createEl("h3", { text: "Create task" });
     const nameContainer = contentEl.createEl("div", { cls: "monday-modal-field" });
     nameContainer.createEl("label", { text: "Task name" });
     this.taskNameInput = nameContainer.createEl("input", {
@@ -2322,7 +2322,7 @@ var StatusBarManager = class {
       return;
     this.statusBarEl = this.plugin.addStatusBarItem();
     this.statusBarEl.addClass("monday-status-bar");
-    this.statusBarEl.title = "Click to open Monday.com sidebar";
+    this.statusBarEl.title = "Click to open sidebar";
     this.statusBarEl.addEventListener("click", () => {
       void this.plugin.activateView();
     });
@@ -2366,7 +2366,7 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     new import_obsidian.Setting(containerEl).setName("API configuration").setHeading();
-    new import_obsidian.Setting(containerEl).setName("API token").setDesc("Your Monday.com API token. Get it from Monday.com > Profile > Developers > My Access Tokens").addText((text) => {
+    new import_obsidian.Setting(containerEl).setName("API token").setDesc("Your Monday.com API token (Monday.com > Profile > Developers > My access tokens)").addText((text) => {
       text.inputEl.type = "password";
       text.inputEl.addClass("monday-settings-input-wide");
       return text.setPlaceholder("Enter your API token").setValue(this.plugin.settings.apiToken).onChange(async (value) => {
@@ -2391,7 +2391,7 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
         button.setDisabled(false);
       }, 2e3);
     }));
-    new import_obsidian.Setting(containerEl).setName("Load boards").setDesc("Fetch your Monday.com boards").addButton((button) => button.setButtonText("Load boards").onClick(async () => {
+    new import_obsidian.Setting(containerEl).setName("Load boards").setDesc("Fetch your boards from Monday.com").addButton((button) => button.setButtonText("Load boards").onClick(async () => {
       button.setButtonText("Loading...");
       button.setDisabled(true);
       try {
@@ -2421,7 +2421,7 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
       });
     }
     new import_obsidian.Setting(containerEl).setName("Display").setHeading();
-    new import_obsidian.Setting(containerEl).setName("Show status bar").setDesc("Display Monday.com sync status in the status bar").addToggle((toggle) => toggle.setValue(this.plugin.settings.showStatusBar).onChange(async (value) => {
+    new import_obsidian.Setting(containerEl).setName("Show status bar").setDesc("Show sync status in the status bar").addToggle((toggle) => toggle.setValue(this.plugin.settings.showStatusBar).onChange(async (value) => {
       this.plugin.settings.showStatusBar = value;
       await this.plugin.saveSettings();
       if (value) {
@@ -2440,7 +2440,7 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
       await this.plugin.saveSettings();
     }));
     new import_obsidian.Setting(containerEl).setName("Note creation").setHeading();
-    new import_obsidian.Setting(containerEl).setName("Note folder").setDesc("Folder where notes created from Monday.com items will be saved").addText((text) => text.setPlaceholder("Monday").setValue(this.plugin.settings.noteFolder).onChange(async (value) => {
+    new import_obsidian.Setting(containerEl).setName("Note folder").setDesc("Folder where notes created from items will be saved").addText((text) => text.setPlaceholder("Monday").setValue(this.plugin.settings.noteFolder).onChange(async (value) => {
       this.plugin.settings.noteFolder = value || "Monday";
       await this.plugin.saveSettings();
     }));
@@ -2459,7 +2459,7 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
     exampleList.createEl("li", { text: '{group} - {name} \u2192 "Sprint 1 - Fix login bug"' });
     new import_obsidian.Setting(containerEl).setName("Usage").setHeading();
     const usageEl = containerEl.createEl("div", { cls: "monday-usage" });
-    usageEl.createEl("p", { text: "Add a Monday.com dashboard to any note by inserting a code block:" });
+    usageEl.createEl("p", { text: "Add a dashboard to any note by inserting a code block:" });
     const codeExample = usageEl.createEl("pre");
     codeExample.createEl("code", {
       text: "```monday\nboard: YOUR_BOARD_ID\ntitle: My Tasks\nlimit: 25\n```"
@@ -2518,10 +2518,10 @@ var MondayIntegrationPlugin = class extends import_obsidian.Plugin {
         ctx.addChild(renderer);
       }
     );
-    this.addRibbonIcon("calendar-check", "Open Monday.com", () => {
+    this.addRibbonIcon("calendar-check", "Open Monday sidebar", () => {
       void this.activateView();
     });
-    this.addRibbonIcon("users", "Open Monday team summary", () => {
+    this.addRibbonIcon("users", "Open team summary", () => {
       void this.activateTeamView();
     });
     this.addCommand({
@@ -2560,7 +2560,7 @@ title: My Tasks
           return;
         }
         try {
-          new import_obsidian.Notice("Refreshing Monday.com boards...");
+          new import_obsidian.Notice("Refreshing boards...");
           const boards = await this.apiClient.getBoards();
           this.settings.cachedBoards = boards;
           this.settings.lastSync = Date.now();
@@ -2574,14 +2574,14 @@ title: My Tasks
     });
     this.addCommand({
       id: "create-monday-task",
-      name: "Create Monday.com task",
+      name: "Create task",
       editorCallback: (editor) => {
         if (!this.settings.apiToken) {
-          new import_obsidian.Notice("Please configure your Monday.com API token first");
+          new import_obsidian.Notice("Please configure your API token first");
           return;
         }
         if (this.settings.cachedBoards.length === 0) {
-          new import_obsidian.Notice("Please load your Monday.com boards first (Settings > Monday.com Integration)");
+          new import_obsidian.Notice("Please load your boards first in settings");
           return;
         }
         const selection = editor.getSelection();

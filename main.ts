@@ -629,7 +629,7 @@ class MondayDashboardRenderer extends MarkdownRenderChild {
     private renderLoading(container: HTMLElement) {
         const loadingEl = container.createEl('div', { cls: 'monday-loading' });
         loadingEl.createEl('div', { cls: 'monday-spinner' });
-        loadingEl.createEl('div', { text: 'Loading Monday.com data...', cls: 'monday-loading-text' });
+        loadingEl.createEl('div', { text: 'Loading data...', cls: 'monday-loading-text' });
     }
 
     private renderError(container: HTMLElement, message: string) {
@@ -2106,7 +2106,7 @@ class MondayView extends ItemView {
 
     private async refreshBoards() {
         try {
-            new Notice('Refreshing Monday.com boards...');
+            new Notice('Refreshing boards...');
             const boards = await this.plugin.apiClient.getBoards();
             this.plugin.settings.cachedBoards = boards;
             this.plugin.settings.lastSync = Date.now();
@@ -2896,7 +2896,7 @@ class CreateTaskModal extends Modal {
         contentEl.empty();
         contentEl.addClass('monday-create-task-modal');
 
-        contentEl.createEl('h3', { text: 'Create Monday.com task' });
+        contentEl.createEl('h3', { text: 'Create task' });
 
         // Task name input
         const nameContainer = contentEl.createEl('div', { cls: 'monday-modal-field' });
@@ -3084,7 +3084,7 @@ class StatusBarManager {
 
         this.statusBarEl = this.plugin.addStatusBarItem();
         this.statusBarEl.addClass('monday-status-bar');
-        this.statusBarEl.title = 'Click to open Monday.com sidebar';
+        this.statusBarEl.title = 'Click to open sidebar';
 
         this.statusBarEl.addEventListener('click', () => {
             void this.plugin.activateView();
@@ -3150,7 +3150,7 @@ class MondaySettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('API token')
-            .setDesc('Your Monday.com API token. Get it from Monday.com > Profile > Developers > My Access Tokens')
+            .setDesc('Your Monday.com API token (Monday.com > Profile > Developers > My access tokens)')
             .addText(text => {
                 text.inputEl.type = 'password';
                 text.inputEl.addClass('monday-settings-input-wide');
@@ -3193,7 +3193,7 @@ class MondaySettingTab extends PluginSettingTab {
         // Load boards button
         new Setting(containerEl)
             .setName('Load boards')
-            .setDesc('Fetch your Monday.com boards')
+            .setDesc('Fetch your boards from Monday.com')
             .addButton(button => button
                 .setButtonText('Load boards')
                 .onClick(async () => {
@@ -3240,7 +3240,7 @@ class MondaySettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Show status bar')
-            .setDesc('Display Monday.com sync status in the status bar')
+            .setDesc('Show sync status in the status bar')
             .addToggle(toggle => toggle
                 .setValue(this.plugin.settings.showStatusBar)
                 .onChange(async (value) => {
@@ -3282,7 +3282,7 @@ class MondaySettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('Note folder')
-            .setDesc('Folder where notes created from Monday.com items will be saved')
+            .setDesc('Folder where notes created from items will be saved')
             .addText(text => text
                 .setPlaceholder('Monday')
                 .setValue(this.plugin.settings.noteFolder)
@@ -3318,7 +3318,7 @@ class MondaySettingTab extends PluginSettingTab {
             .setHeading();
 
         const usageEl = containerEl.createEl('div', { cls: 'monday-usage' });
-        usageEl.createEl('p', { text: 'Add a Monday.com dashboard to any note by inserting a code block:' });
+        usageEl.createEl('p', { text: 'Add a dashboard to any note by inserting a code block:' });
 
         const codeExample = usageEl.createEl('pre');
         codeExample.createEl('code', {
@@ -3404,12 +3404,12 @@ export default class MondayIntegrationPlugin extends Plugin {
         );
 
         // Add ribbon icon
-        this.addRibbonIcon('calendar-check', 'Open Monday.com', () => {
+        this.addRibbonIcon('calendar-check', 'Open Monday sidebar', () => {
             void this.activateView();
         });
 
         // Add ribbon icon for team view
-        this.addRibbonIcon('users', 'Open Monday team summary', () => {
+        this.addRibbonIcon('users', 'Open team summary', () => {
             void this.activateTeamView();
         });
 
@@ -3449,7 +3449,7 @@ export default class MondayIntegrationPlugin extends Plugin {
                     return;
                 }
                 try {
-                    new Notice('Refreshing Monday.com boards...');
+                    new Notice('Refreshing boards...');
                     const boards = await this.apiClient.getBoards();
                     this.settings.cachedBoards = boards;
                     this.settings.lastSync = Date.now();
@@ -3462,17 +3462,17 @@ export default class MondayIntegrationPlugin extends Plugin {
             }
         });
 
-        // Command to create a Monday.com task from selection or prompt
+        // Command to create a task from selection or prompt
         this.addCommand({
             id: 'create-monday-task',
-            name: 'Create Monday.com task',
+            name: 'Create task',
             editorCallback: (editor: Editor) => {
                 if (!this.settings.apiToken) {
-                    new Notice('Please configure your Monday.com API token first');
+                    new Notice('Please configure your API token first');
                     return;
                 }
                 if (this.settings.cachedBoards.length === 0) {
-                    new Notice('Please load your Monday.com boards first (Settings > Monday.com Integration)');
+                    new Notice('Please load your boards first in settings');
                     return;
                 }
                 const selection = editor.getSelection();
