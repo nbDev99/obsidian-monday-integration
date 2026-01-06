@@ -59,10 +59,11 @@ var MondayApiClient = class {
       },
       body: JSON.stringify({ query: graphql })
     });
-    if (response.json.errors) {
-      throw new Error(((_a = response.json.errors[0]) == null ? void 0 : _a.message) || "API error");
+    const json = response.json;
+    if (json.errors) {
+      throw new Error(((_a = json.errors[0]) == null ? void 0 : _a.message) || "API error");
     }
-    return response.json.data;
+    return json.data;
   }
   async testConnection() {
     try {
@@ -550,7 +551,7 @@ var MondayView = class extends import_obsidian.ItemView {
     const headerEl = container.createEl("div", { cls: "monday-sidebar-header" });
     headerEl.createEl("h4", { text: "Monday.com" });
     const refreshBtn = headerEl.createEl("button", { cls: "monday-sidebar-refresh" });
-    refreshBtn.innerHTML = "&#x21bb;";
+    refreshBtn.setText("\u21BB");
     refreshBtn.title = "Refresh boards";
     refreshBtn.addEventListener("click", () => void this.refreshBoards());
     const selectorEl = container.createEl("div", { cls: "monday-board-selector" });
@@ -1090,17 +1091,17 @@ var DuplicateNoteModal = class extends import_obsidian.Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("monday-duplicate-modal");
-    contentEl.createEl("h3", { text: "Note Already Exists" });
+    contentEl.createEl("h3", { text: "Note already exists" });
     contentEl.createEl("p", { text: `A note already exists at:` });
     contentEl.createEl("code", { text: this.notePath, cls: "monday-modal-path" });
     contentEl.createEl("p", { text: "What would you like to do?" });
     const buttonContainer = contentEl.createEl("div", { cls: "monday-modal-buttons" });
-    const openBtn = buttonContainer.createEl("button", { text: "Open Existing Note", cls: "mod-cta" });
+    const openBtn = buttonContainer.createEl("button", { text: "Open existing note", cls: "mod-cta" });
     openBtn.addEventListener("click", () => {
       this.callback("open");
       this.close();
     });
-    const createBtn = buttonContainer.createEl("button", { text: "Create New Note" });
+    const createBtn = buttonContainer.createEl("button", { text: "Create new note" });
     createBtn.addEventListener("click", () => {
       this.callback("create");
       this.close();
@@ -1125,7 +1126,7 @@ var AddCommentModal = class extends import_obsidian.Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("monday-comment-modal");
-    contentEl.createEl("h3", { text: "Add Comment" });
+    contentEl.createEl("h3", { text: "Add comment" });
     contentEl.createEl("p", { text: `Adding comment to: ${this.itemName}`, cls: "monday-comment-item-name" });
     const textArea = contentEl.createEl("textarea", {
       cls: "monday-comment-textarea",
@@ -1133,7 +1134,7 @@ var AddCommentModal = class extends import_obsidian.Modal {
     });
     textArea.rows = 5;
     const buttonContainer = contentEl.createEl("div", { cls: "monday-modal-buttons" });
-    const submitBtn = buttonContainer.createEl("button", { text: "Add Comment", cls: "mod-cta" });
+    const submitBtn = buttonContainer.createEl("button", { text: "Add comment", cls: "mod-cta" });
     submitBtn.addEventListener("click", () => {
       const comment = textArea.value.trim();
       if (comment) {
@@ -1171,7 +1172,7 @@ var CreateTaskModal = class extends import_obsidian.Modal {
     const { contentEl } = this;
     contentEl.empty();
     contentEl.addClass("monday-create-task-modal");
-    contentEl.createEl("h3", { text: "Create Monday.com Task" });
+    contentEl.createEl("h3", { text: "Create Monday.com task" });
     const nameContainer = contentEl.createEl("div", { cls: "monday-modal-field" });
     nameContainer.createEl("label", { text: "Task name" });
     this.taskNameInput = nameContainer.createEl("input", {
@@ -1212,7 +1213,7 @@ var CreateTaskModal = class extends import_obsidian.Modal {
       await this.loadGroups();
     }
     const buttonContainer = contentEl.createEl("div", { cls: "monday-modal-buttons" });
-    this.submitBtn = buttonContainer.createEl("button", { text: "Create Task", cls: "mod-cta" });
+    this.submitBtn = buttonContainer.createEl("button", { text: "Create task", cls: "mod-cta" });
     this.submitBtn.disabled = true;
     this.submitBtn.addEventListener("click", () => void this.createTask());
     const cancelBtn = buttonContainer.createEl("button", { text: "Cancel" });
@@ -1291,7 +1292,7 @@ var CreateTaskModal = class extends import_obsidian.Modal {
         new import_obsidian.Notice("Failed to create task");
         if (this.submitBtn) {
           this.submitBtn.disabled = false;
-          this.submitBtn.textContent = "Create Task";
+          this.submitBtn.textContent = "Create task";
         }
       }
     } catch (error) {
@@ -1363,7 +1364,7 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
     new import_obsidian.Setting(containerEl).setName("API configuration").setHeading();
     new import_obsidian.Setting(containerEl).setName("API token").setDesc("Your Monday.com API token. Get it from Monday.com > Profile > Developers > My Access Tokens").addText((text) => {
       text.inputEl.type = "password";
-      text.inputEl.style.width = "300px";
+      text.inputEl.addClass("monday-settings-input-wide");
       return text.setPlaceholder("Enter your API token").setValue(this.plugin.settings.apiToken).onChange(async (value) => {
         this.plugin.settings.apiToken = value;
         await this.plugin.saveSettings();
@@ -1440,7 +1441,7 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
       await this.plugin.saveSettings();
     }));
     new import_obsidian.Setting(containerEl).setName("Note name template").setDesc("Template for note names. Use {name}, {board}, {group}, {id} as placeholders").addText((text) => {
-      text.inputEl.style.width = "200px";
+      text.inputEl.addClass("monday-settings-input-medium");
       return text.setPlaceholder("{name}").setValue(this.plugin.settings.noteNameTemplate).onChange(async (value) => {
         this.plugin.settings.noteNameTemplate = value || "{name}";
         await this.plugin.saveSettings();

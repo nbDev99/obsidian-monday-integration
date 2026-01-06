@@ -928,3 +928,15 @@
     opacity: 0.5;
     cursor: not-allowed;
 }
+
+/* ----------------------------------------------------------------------------
+   Settings Input Widths
+   ---------------------------------------------------------------------------- */
+
+.monday-settings-input-wide {
+    width: 300px;
+}
+
+.monday-settings-input-medium {
+    width: 200px;
+}

@@ -76,6 +76,11 @@ interface BoardData {
 
 type DisplayStyle = 'cards' | 'table' | 'compact';
 
+// Extended MenuItem interface for submenu support (Obsidian internal API)
+interface MenuItemWithSubmenu {
+    setSubmenu(): Menu;
+}
+
 interface ItemFilter {
     statusInclude: string[];  // Only show these statuses
     statusExclude: string[];  // Hide these statuses
@@ -111,7 +116,7 @@ const DEFAULT_SETTINGS: MondayIntegrationSettings = {
 class MondayApiClient {
     constructor(private apiToken: string) {}
 
-    async query(graphql: string): Promise<any> {
+    async query<T = Record<string, unknown>>(graphql: string): Promise<T> {
         if (!this.apiToken) {
             throw new Error('API token not configured');
         }
@@ -127,16 +132,19 @@ class MondayApiClient {
             body: JSON.stringify({ query: graphql })
         });
 
-        if (response.json.errors) {
-            throw new Error(response.json.errors[0]?.message || 'API error');
+        const json = response.json as { data?: T; errors?: Array<{ message: string }> };
+
+        if (json.errors) {
+            throw new Error(json.errors[0]?.message || 'API error');
         }
 
-        return response.json.data;
+        return json.data as T;
     }
 
     async testConnection(): Promise<boolean> {
         try {
-            const data = await this.query('{ me { name } }');
+            interface MeResponse { me: { name: string } }
+            const data = await this.query<MeResponse>('{ me { name } }');
             return !!data.me;
         } catch {
             return false;
@@ -144,7 +152,8 @@ class MondayApiClient {
     }
 
     async getBoards(): Promise<Board[]> {
-        const data = await this.query(`
+        interface BoardsResponse { boards: Board[] }
+        const data = await this.query<BoardsResponse>(`
             query {
                 boards(limit: 50, state: active) {
                     id
@@ -159,7 +168,14 @@ class MondayApiClient {
     }
 
     async getBoardData(boardId: string, limit: number = 50): Promise<BoardData | null> {
-        const data = await this.query(`
+        interface BoardDataResponse {
+            boards: Array<{
+                name: string;
+                columns: Column[];
+                items_page?: { items: Item[] };
+            }>;
+        }
+        const data = await this.query<BoardDataResponse>(`
             query {
                 boards(ids: [${boardId}]) {
                     name
@@ -197,7 +213,8 @@ class MondayApiClient {
     async changeItemStatus(boardId: string, itemId: string, columnId: string, statusLabel: string): Promise<boolean> {
         try {
             const value = JSON.stringify({ label: statusLabel });
-            await this.query(`
+            interface ChangeColumnResponse { change_column_value: { id: string } }
+            await this.query<ChangeColumnResponse>(`
                 mutation {
                     change_column_value(
                         board_id: ${boardId},
@@ -218,7 +235,8 @@ class MondayApiClient {
 
     async addItemUpdate(itemId: string, body: string): Promise<boolean> {
         try {
-            await this.query(`
+            interface CreateUpdateResponse { create_update: { id: string } }
+            await this.query<CreateUpdateResponse>(`
                 mutation {
                     create_update(
                         item_id: ${itemId},
@@ -237,7 +255,12 @@ class MondayApiClient {
 
     async getStatusColumnSettings(boardId: string, columnId: string): Promise<string[]> {
         try {
-            const data = await this.query(`
+            interface ColumnSettingsResponse {
+                boards: Array<{
+                    columns: Array<{ settings_str: string }>;
+                }>;
+            }
+            const data = await this.query<ColumnSettingsResponse>(`
                 query {
                     boards(ids: [${boardId}]) {
                         columns(ids: ["${columnId}"]) {
@@ -248,9 +271,9 @@ class MondayApiClient {
             `);
 
             if (data.boards?.[0]?.columns?.[0]?.settings_str) {
-                const settings = JSON.parse(data.boards[0].columns[0].settings_str);
+                const settings = JSON.parse(data.boards[0].columns[0].settings_str) as { labels?: Record<string, string> };
                 if (settings.labels) {
-                    return Object.values(settings.labels) as string[];
+                    return Object.values(settings.labels);
                 }
             }
             return [];
@@ -262,7 +285,12 @@ class MondayApiClient {
 
     async getBoardGroups(boardId: string): Promise<{ id: string; title: string; color: string }[]> {
         try {
-            const data = await this.query(`
+            interface BoardGroupsResponse {
+                boards: Array<{
+                    groups: Array<{ id: string; title: string; color: string }>;
+                }>;
+            }
+            const data = await this.query<BoardGroupsResponse>(`
                 query {
                     boards(ids: [${boardId}]) {
                         groups {
@@ -283,7 +311,10 @@ class MondayApiClient {
 
     async createItem(boardId: string, groupId: string, itemName: string): Promise<{ id: string; name: string } | null> {
         try {
-            const data = await this.query(`
+            interface CreateItemResponse {
+                create_item: { id: string; name: string };
+            }
+            const data = await this.query<CreateItemResponse>(`
                 mutation {
                     create_item(
                         board_id: ${boardId},
@@ -745,7 +776,7 @@ class MondayView extends ItemView {
         headerEl.createEl('h4', { text: 'Monday.com' });
 
         const refreshBtn = headerEl.createEl('button', { cls: 'monday-sidebar-refresh' });
-        refreshBtn.innerHTML = '&#x21bb;'; // Refresh icon
+        refreshBtn.setText('↻'); // Refresh icon
         refreshBtn.title = 'Refresh boards';
         refreshBtn.addEventListener('click', () => void this.refreshBoards());
 
@@ -1335,7 +1366,7 @@ class MondayView extends ItemView {
                     .setIcon('check-circle');
 
                 // Add submenu items for each status
-                const submenu = (menuItem as any).setSubmenu() as Menu;
+                const submenu = (menuItem as unknown as MenuItemWithSubmenu).setSubmenu();
                 for (const status of statusOptions) {
                     submenu.addItem((subItem) => {
                         subItem
@@ -1438,20 +1469,20 @@ class DuplicateNoteModal extends Modal {
         contentEl.empty();
         contentEl.addClass('monday-duplicate-modal');
 
-        contentEl.createEl('h3', { text: 'Note Already Exists' });
+        contentEl.createEl('h3', { text: 'Note already exists' });
         contentEl.createEl('p', { text: `A note already exists at:` });
         contentEl.createEl('code', { text: this.notePath, cls: 'monday-modal-path' });
         contentEl.createEl('p', { text: 'What would you like to do?' });
 
         const buttonContainer = contentEl.createEl('div', { cls: 'monday-modal-buttons' });
 
-        const openBtn = buttonContainer.createEl('button', { text: 'Open Existing Note', cls: 'mod-cta' });
+        const openBtn = buttonContainer.createEl('button', { text: 'Open existing note', cls: 'mod-cta' });
         openBtn.addEventListener('click', () => {
             this.callback('open');
             this.close();
         });
 
-        const createBtn = buttonContainer.createEl('button', { text: 'Create New Note' });
+        const createBtn = buttonContainer.createEl('button', { text: 'Create new note' });
         createBtn.addEventListener('click', () => {
             this.callback('create');
             this.close();
@@ -1488,7 +1519,7 @@ class AddCommentModal extends Modal {
         contentEl.empty();
         contentEl.addClass('monday-comment-modal');
 
-        contentEl.createEl('h3', { text: 'Add Comment' });
+        contentEl.createEl('h3', { text: 'Add comment' });
         contentEl.createEl('p', { text: `Adding comment to: ${this.itemName}`, cls: 'monday-comment-item-name' });
 
         const textArea = contentEl.createEl('textarea', {
@@ -1499,7 +1530,7 @@ class AddCommentModal extends Modal {
 
         const buttonContainer = contentEl.createEl('div', { cls: 'monday-modal-buttons' });
 
-        const submitBtn = buttonContainer.createEl('button', { text: 'Add Comment', cls: 'mod-cta' });
+        const submitBtn = buttonContainer.createEl('button', { text: 'Add comment', cls: 'mod-cta' });
         submitBtn.addEventListener('click', () => {
             const comment = textArea.value.trim();
             if (comment) {
@@ -1557,7 +1588,7 @@ class CreateTaskModal extends Modal {
         contentEl.empty();
         contentEl.addClass('monday-create-task-modal');
 
-        contentEl.createEl('h3', { text: 'Create Monday.com Task' });
+        contentEl.createEl('h3', { text: 'Create Monday.com task' });
 
         // Task name input
         const nameContainer = contentEl.createEl('div', { cls: 'monday-modal-field' });
@@ -1614,7 +1645,7 @@ class CreateTaskModal extends Modal {
         // Buttons
         const buttonContainer = contentEl.createEl('div', { cls: 'monday-modal-buttons' });
 
-        this.submitBtn = buttonContainer.createEl('button', { text: 'Create Task', cls: 'mod-cta' });
+        this.submitBtn = buttonContainer.createEl('button', { text: 'Create task', cls: 'mod-cta' });
         this.submitBtn.disabled = true;
         this.submitBtn.addEventListener('click', () => void this.createTask());
 
@@ -1710,7 +1741,7 @@ class CreateTaskModal extends Modal {
                 new Notice('Failed to create task');
                 if (this.submitBtn) {
                     this.submitBtn.disabled = false;
-                    this.submitBtn.textContent = 'Create Task';
+                    this.submitBtn.textContent = 'Create task';
                 }
             }
         } catch (error) {
@@ -1814,7 +1845,7 @@ class MondaySettingTab extends PluginSettingTab {
             .setDesc('Your Monday.com API token. Get it from Monday.com > Profile > Developers > My Access Tokens')
             .addText(text => {
                 text.inputEl.type = 'password';
-                text.inputEl.style.width = '300px';
+                text.inputEl.addClass('monday-settings-input-wide');
                 return text
                     .setPlaceholder('Enter your API token')
                     .setValue(this.plugin.settings.apiToken)
@@ -1956,7 +1987,7 @@ class MondaySettingTab extends PluginSettingTab {
             .setName('Note name template')
             .setDesc('Template for note names. Use {name}, {board}, {group}, {id} as placeholders')
             .addText(text => {
-                text.inputEl.style.width = '200px';
+                text.inputEl.addClass('monday-settings-input-medium');
                 return text
                     .setPlaceholder('{name}')
                     .setValue(this.plugin.settings.noteNameTemplate)
