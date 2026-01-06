@@ -1600,9 +1600,6 @@ class MondayView extends ItemView {
             return col?.type === 'person' || col?.type === 'people';
         });
 
-        // Find board URL
-        const board = plugin.settings.cachedBoards.find(b => b.id === this.selectedBoardId);
-
         // Build frontmatter
         const frontmatter: Record<string, string | string[]> = {
             title: item.name,
@@ -1707,7 +1704,6 @@ class MondayView extends ItemView {
 
     private async createNoteForSubitem(subitem: Subitem, parentItem: Item, boardData: BoardData, notePath: string) {
         const app = this.app;
-        const plugin = this.plugin;
 
         // Ensure folder exists
         const folderPath = notePath.substring(0, notePath.lastIndexOf('/'));
@@ -3150,7 +3146,7 @@ class MondaySettingTab extends PluginSettingTab {
 
         new Setting(containerEl)
             .setName('API token')
-            .setDesc('Your Monday.com API token (Monday.com > Profile > Developers > My access tokens)')
+            .setDesc('Your API token from monday.com')
             .addText(text => {
                 text.inputEl.type = 'password';
                 text.inputEl.addClass('monday-settings-input-wide');
@@ -3193,7 +3189,7 @@ class MondaySettingTab extends PluginSettingTab {
         // Load boards button
         new Setting(containerEl)
             .setName('Load boards')
-            .setDesc('Fetch your boards from Monday.com')
+            .setDesc('Fetch available boards')
             .addButton(button => button
                 .setButtonText('Load boards')
                 .onClick(async () => {
@@ -3327,10 +3323,10 @@ class MondaySettingTab extends PluginSettingTab {
 
         usageEl.createEl('p', { text: 'Options:' });
         const optionsList = usageEl.createEl('ul');
-        optionsList.createEl('li', { text: 'board: board ID (required if no default set)' });
-        optionsList.createEl('li', { text: 'title: custom title (optional)' });
-        optionsList.createEl('li', { text: 'limit: max items to show (default: 25)' });
-        optionsList.createEl('li', { text: 'columns: comma-separated column IDs to display' });
+        optionsList.createEl('li', { text: 'board — board id (required if no default set)' });
+        optionsList.createEl('li', { text: 'title — custom title (optional)' });
+        optionsList.createEl('li', { text: 'limit — max items to show (default: 25)' });
+        optionsList.createEl('li', { text: 'columns — comma-separated column ids to display' });
 
         // Support section
         new Setting(containerEl)
@@ -3404,7 +3400,7 @@ export default class MondayIntegrationPlugin extends Plugin {
         );
 
         // Add ribbon icon
-        this.addRibbonIcon('calendar-check', 'Open Monday sidebar', () => {
+        this.addRibbonIcon('calendar-check', 'Open sidebar', () => {
             void this.activateView();
         });
 

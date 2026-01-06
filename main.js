@@ -1181,7 +1181,6 @@ var MondayView = class extends import_obsidian.ItemView {
       const col = boardData.columns.find((c) => c.id === cv.id);
       return (col == null ? void 0 : col.type) === "person" || (col == null ? void 0 : col.type) === "people";
     });
-    const board = plugin.settings.cachedBoards.find((b) => b.id === this.selectedBoardId);
     const frontmatter = {
       title: item.name,
       monday_id: item.id,
@@ -1280,7 +1279,6 @@ var MondayView = class extends import_obsidian.ItemView {
   }
   async createNoteForSubitem(subitem, parentItem, boardData, notePath) {
     const app = this.app;
-    const plugin = this.plugin;
     const folderPath = notePath.substring(0, notePath.lastIndexOf("/"));
     if (folderPath && !app.vault.getAbstractFileByPath(folderPath)) {
       await app.vault.createFolder(folderPath);
@@ -2366,7 +2364,7 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     new import_obsidian.Setting(containerEl).setName("API configuration").setHeading();
-    new import_obsidian.Setting(containerEl).setName("API token").setDesc("Your Monday.com API token (Monday.com > Profile > Developers > My access tokens)").addText((text) => {
+    new import_obsidian.Setting(containerEl).setName("API token").setDesc("Your API token from monday.com").addText((text) => {
       text.inputEl.type = "password";
       text.inputEl.addClass("monday-settings-input-wide");
       return text.setPlaceholder("Enter your API token").setValue(this.plugin.settings.apiToken).onChange(async (value) => {
@@ -2391,7 +2389,7 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
         button.setDisabled(false);
       }, 2e3);
     }));
-    new import_obsidian.Setting(containerEl).setName("Load boards").setDesc("Fetch your boards from Monday.com").addButton((button) => button.setButtonText("Load boards").onClick(async () => {
+    new import_obsidian.Setting(containerEl).setName("Load boards").setDesc("Fetch available boards").addButton((button) => button.setButtonText("Load boards").onClick(async () => {
       button.setButtonText("Loading...");
       button.setDisabled(true);
       try {
@@ -2466,10 +2464,10 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
     });
     usageEl.createEl("p", { text: "Options:" });
     const optionsList = usageEl.createEl("ul");
-    optionsList.createEl("li", { text: "board: board ID (required if no default set)" });
-    optionsList.createEl("li", { text: "title: custom title (optional)" });
-    optionsList.createEl("li", { text: "limit: max items to show (default: 25)" });
-    optionsList.createEl("li", { text: "columns: comma-separated column IDs to display" });
+    optionsList.createEl("li", { text: "board \u2014 board id (required if no default set)" });
+    optionsList.createEl("li", { text: "title \u2014 custom title (optional)" });
+    optionsList.createEl("li", { text: "limit \u2014 max items to show (default: 25)" });
+    optionsList.createEl("li", { text: "columns \u2014 comma-separated column ids to display" });
     new import_obsidian.Setting(containerEl).setName("Support this plugin").setHeading();
     const supportEl = containerEl.createEl("div", { cls: "monday-support" });
     supportEl.createEl("p", {
@@ -2518,7 +2516,7 @@ var MondayIntegrationPlugin = class extends import_obsidian.Plugin {
         ctx.addChild(renderer);
       }
     );
-    this.addRibbonIcon("calendar-check", "Open Monday sidebar", () => {
+    this.addRibbonIcon("calendar-check", "Open sidebar", () => {
       void this.activateView();
     });
     this.addRibbonIcon("users", "Open team summary", () => {
