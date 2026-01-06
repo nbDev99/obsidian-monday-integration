@@ -8,10 +8,12 @@ View your Monday.com boards and items directly within your notes and in a dedica
 
 - **Embedded Dashboards** - Insert `monday` code blocks to display board items in your notes
 - **Sidebar Panel** - Browse all your boards and items in a dedicated view
+- **Team Summary Panel** - View task counts per team member with status badges
 - **Click-to-Create Notes** - Click any item to create a linked note with task metadata
 - **Duplicate Detection** - Checks for existing notes before creating new ones
 - **Create Tasks** - Create Monday.com items from selected text in your notes
-- **Change Status** - Update item status via dropdown or context menu
+- **Change Status** - Update item status via dropdown or context menu (including subtasks)
+- **Assign/Reassign** - Assign or reassign people to tasks and subtasks
 - **Add Comments** - Post comments to items directly from the sidebar
 - **Live Data** - Fetch real-time data from Monday.com's API
 - **Customisable** - Configure note folder, naming templates, and display options
@@ -73,6 +75,21 @@ Click the calendar-check icon in the left ribbon or use the command palette:
 
 ![Sidebar with Filters](screenshots/sidebar-filters.png)
 
+### Team Summary Panel
+
+View task counts per team member with colour-coded status badges:
+- **Orange** - Working on it
+- **Green** - Done
+- **Red** - Overdue
+
+Click the users icon in the left ribbon or use:
+- `Monday.com Integration: Open team summary`
+
+**Features:**
+- Click a team member to filter the main sidebar by that person
+- Board selection syncs between both panels
+- Split your sidebar horizontally to view both panels together
+
 ### Create Notes from Items
 
 **Click any item** in the sidebar to create a linked note with task metadata. The note includes:
@@ -101,10 +118,20 @@ Create Monday.com tasks directly from selected text in your notes:
 
 ![Create Task Modal](screenshots/create-task.png)
 
+### Context Menu Actions
+
+Right-click on any task or subtask in the sidebar for additional options:
+
+- **Change Status** - Update task status (works on both parent tasks and subtasks)
+- **Assign/Reassign** - Assign people to the task or reassign to different team members
+- **Add Comment** - Post a comment to the task
+- **Open in Monday.com** - Open the task in your browser
+
 ### Commands
 
 - **Insert board dashboard** - Insert a code block at cursor
 - **Open sidebar** - Open the Monday.com sidebar panel
+- **Open team summary** - Open the team summary panel
 - **Refresh boards** - Force refresh cached board data
 - **Create Monday.com task** - Create a task from selected text
 

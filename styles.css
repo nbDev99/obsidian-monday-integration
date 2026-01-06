@@ -940,3 +940,359 @@
 .monday-settings-input-medium {
     width: 200px;
 }
+
+/* ----------------------------------------------------------------------------
+   Subitems / Subtasks
+   ---------------------------------------------------------------------------- */
+
+.monday-sidebar-item-wrapper {
+    display: flex;
+    flex-direction: column;
+}
+
+.monday-expand-btn {
+    cursor: pointer;
+    margin-right: 0.4em;
+    font-size: 0.7em;
+    color: var(--text-muted);
+    transition: transform 0.15s ease;
+    user-select: none;
+}
+
+.monday-expand-btn:hover {
+    color: var(--text-normal);
+}
+
+.monday-no-subtasks-icon {
+    margin-right: 0.4em;
+    font-size: 0.7em;
+    color: var(--text-faint);
+}
+
+.monday-expand-btn.expanded {
+    color: var(--interactive-accent);
+}
+
+.monday-subitems-container {
+    margin-left: 1.2em;
+    padding-left: 0.5em;
+    border-left: 2px solid var(--background-modifier-border);
+    margin-top: 0.2em;
+    margin-bottom: 0.3em;
+}
+
+.monday-subitem {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 0.25em 0.4em;
+    font-size: 0.85em;
+    border-radius: 3px;
+}
+
+.monday-subitem:hover {
+    background: var(--background-modifier-hover);
+}
+
+.monday-subitem-prefix {
+    color: var(--text-faint);
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+.monday-subitem-name {
+    flex: 1;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.monday-subitem-name:hover {
+    color: var(--text-normal);
+    text-decoration: underline;
+}
+
+.monday-subitem-clickable {
+    cursor: pointer;
+}
+
+.monday-subitem-status {
+    font-size: 0.7em;
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+    color: white;
+    background: #579bfc;
+    flex-shrink: 0;
+}
+
+.monday-subitems-filtered-hint {
+    cursor: default;
+}
+
+.monday-subitem-hint-text {
+    font-size: 0.85em;
+    font-style: italic;
+    color: var(--text-faint);
+}
+
+.monday-add-subtask {
+    display: flex;
+    align-items: center;
+    gap: 0.4em;
+    padding: 0.25em 0.4em;
+    font-size: 0.85em;
+    cursor: pointer;
+    border-radius: 3px;
+    color: var(--text-faint);
+}
+
+.monday-add-subtask:hover {
+    background: var(--background-modifier-hover);
+    color: var(--interactive-accent);
+}
+
+.monday-add-subtask-text {
+    font-style: italic;
+}
+
+/* ----------------------------------------------------------------------------
+   Create Subtask Modal
+   ---------------------------------------------------------------------------- */
+
+.monday-subtask-modal {
+    padding: 0.5em;
+}
+
+.monday-subtask-modal h3 {
+    margin: 0 0 0.5em 0;
+    color: var(--text-normal);
+}
+
+.monday-subtask-parent-name {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    margin-bottom: 1em;
+}
+
+.monday-subtask-input {
+    width: 100%;
+    min-width: 300px;
+    padding: 0.6em 0.8em;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 4px;
+    background: var(--background-primary);
+    color: var(--text-normal);
+    font-size: 0.95em;
+}
+
+.monday-subtask-input:focus {
+    outline: none;
+    border-color: var(--interactive-accent);
+    box-shadow: 0 0 0 2px rgba(var(--interactive-accent-rgb), 0.2);
+}
+
+.monday-subtask-input::placeholder {
+    color: var(--text-faint);
+}
+
+/* ----------------------------------------------------------------------------
+   Team Summary View
+   ---------------------------------------------------------------------------- */
+
+.monday-team-sidebar {
+    padding: 0.5em;
+}
+
+.monday-team-stats {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5em;
+    margin-top: 1em;
+}
+
+.monday-team-member {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5em 0.6em;
+    background: var(--background-secondary);
+    border-radius: 6px;
+    gap: 0.5em;
+}
+
+.monday-team-member:hover {
+    background: var(--background-modifier-hover);
+}
+
+.monday-team-member-name {
+    flex: 1;
+    font-weight: 500;
+    color: var(--text-normal);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.monday-team-badges {
+    display: flex;
+    gap: 0.4em;
+    flex-shrink: 0;
+}
+
+.monday-team-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.6em;
+    height: 1.6em;
+    padding: 0 0.4em;
+    border-radius: 50%;
+    font-size: 0.8em;
+    font-weight: 600;
+    color: white;
+}
+
+.monday-team-badge-working {
+    background: #fdab3d;
+}
+
+.monday-team-badge-done {
+    background: #00c875;
+}
+
+.monday-team-badge-overdue {
+    background: #e2445c;
+}
+
+.monday-team-no-tasks {
+    color: var(--text-faint);
+    font-style: italic;
+}
+
+.monday-team-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.6em 0.6em;
+    margin-top: 0.5em;
+    border-top: 1px solid var(--background-modifier-border);
+    font-weight: 600;
+}
+
+.monday-team-summary-label {
+    color: var(--text-muted);
+}
+
+.monday-team-member-clickable {
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.monday-team-member-clickable:hover {
+    background: var(--interactive-accent);
+    transform: translateX(2px);
+}
+
+.monday-team-member-clickable:hover .monday-team-member-name {
+    color: var(--text-on-accent);
+}
+
+.monday-team-member-clickable:active {
+    transform: translateX(4px);
+}
+
+/* Person Filter Indicator */
+.monday-person-filter-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    padding: 0.4em 0.6em;
+    margin-bottom: 0.5em;
+    background: var(--interactive-accent);
+    border-radius: 6px;
+    color: var(--text-on-accent);
+    font-size: 0.85em;
+}
+
+.monday-person-filter-text {
+    flex: 1;
+}
+
+.monday-person-filter-clear {
+    cursor: pointer;
+    padding: 0 0.3em;
+    border-radius: 3px;
+    opacity: 0.8;
+}
+
+.monday-person-filter-clear:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* ----------------------------------------------------------------------------
+   Assign Person Modal
+   ---------------------------------------------------------------------------- */
+
+.monday-assign-modal {
+    padding: 0.5em;
+}
+
+.monday-assign-modal h3 {
+    margin: 0 0 0.5em 0;
+    color: var(--text-normal);
+}
+
+.monday-assign-item-name {
+    font-weight: 500;
+    color: var(--text-normal);
+    margin-bottom: 0.5em;
+}
+
+.monday-assign-current {
+    color: var(--text-muted);
+    font-size: 0.9em;
+    margin-bottom: 1em;
+}
+
+.monday-user-list {
+    max-height: 300px;
+    overflow-y: auto;
+    margin-bottom: 1em;
+    border: 1px solid var(--background-modifier-border);
+    border-radius: 6px;
+}
+
+.monday-user-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    padding: 0.5em 0.75em;
+    border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.monday-user-item:last-child {
+    border-bottom: none;
+}
+
+.monday-user-item:hover {
+    background: var(--background-modifier-hover);
+}
+
+.monday-user-item input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.monday-user-item label {
+    flex: 1;
+    cursor: pointer;
+    color: var(--text-normal);
+}
+
+.monday-user-email {
+    color: var(--text-faint);
+    font-size: 0.85em;
+}

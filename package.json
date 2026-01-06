@@ -1,6 +1,6 @@
 {
     "name": "monday-integration",
-    "version": "1.0.0",
+    "version": "1.9.2",
     "description": "Obsidian plugin for viewing Monday.com boards and items",
     "main": "main.js",
     "scripts": {

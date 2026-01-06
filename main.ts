@@ -21,6 +21,7 @@ import {
 // ============================================================================
 
 const MONDAY_VIEW_TYPE = 'monday-view';
+const MONDAY_TEAM_VIEW_TYPE = 'monday-team-view';
 const MONDAY_API_URL = 'https://api.monday.com/v2';
 
 // ============================================================================
@@ -47,6 +48,12 @@ interface Board {
     workspace: { name: string } | null;
 }
 
+interface Subitem {
+    id: string;
+    name: string;
+    column_values: ColumnValue[];
+}
+
 interface Item {
     id: string;
     name: string;
@@ -54,6 +61,7 @@ interface Item {
     updated_at: string;
     column_values: ColumnValue[];
     group: { title: string; color: string } | null;
+    subitems?: Subitem[];
 }
 
 interface ColumnValue {
@@ -75,6 +83,13 @@ interface BoardData {
 }
 
 type DisplayStyle = 'cards' | 'table' | 'compact';
+
+interface TeamMemberStats {
+    name: string;
+    workingOnIt: number;  // "Working on it" or similar active status
+    done: number;         // "Done" status
+    overdue: number;      // Not done and past due date
+}
 
 // Extended MenuItem interface for submenu support (Obsidian internal API)
 interface MenuItemWithSubmenu {
@@ -192,6 +207,15 @@ class MondayApiClient {
                                 value
                             }
                             group { title color }
+                            subitems {
+                                id
+                                name
+                                column_values {
+                                    id
+                                    text
+                                    value
+                                }
+                            }
                         }
                     }
                 }
@@ -229,6 +253,47 @@ class MondayApiClient {
             return true;
         } catch (error) {
             console.error('Failed to change status:', error);
+            throw error;
+        }
+    }
+
+    async changeSubitemStatus(subitemId: string, columnId: string, statusLabel: string): Promise<boolean> {
+        try {
+            // First get the subitem's board ID
+            interface SubitemBoardResponse {
+                items: Array<{ board: { id: string } }>;
+            }
+            const boardData = await this.query<SubitemBoardResponse>(`
+                query {
+                    items(ids: [${subitemId}]) {
+                        board { id }
+                    }
+                }
+            `);
+
+            const subitemBoardId = boardData.items?.[0]?.board?.id;
+            if (!subitemBoardId) {
+                throw new Error('Could not find subitem board');
+            }
+
+            // Now change the status
+            const value = JSON.stringify({ label: statusLabel });
+            interface ChangeColumnResponse { change_column_value: { id: string } }
+            await this.query<ChangeColumnResponse>(`
+                mutation {
+                    change_column_value(
+                        board_id: ${subitemBoardId},
+                        item_id: ${subitemId},
+                        column_id: "${columnId}",
+                        value: ${JSON.stringify(value)}
+                    ) {
+                        id
+                    }
+                }
+            `);
+            return true;
+        } catch (error) {
+            console.error('Failed to change subitem status:', error);
             throw error;
         }
     }
@@ -330,6 +395,105 @@ class MondayApiClient {
             return data.create_item || null;
         } catch (error) {
             console.error('Failed to create item:', error);
+            throw error;
+        }
+    }
+
+    async createSubitem(parentItemId: string, subitemName: string): Promise<{ id: string; name: string } | null> {
+        try {
+            interface CreateSubitemResponse {
+                create_subitem: { id: string; name: string };
+            }
+            const data = await this.query<CreateSubitemResponse>(`
+                mutation {
+                    create_subitem(
+                        parent_item_id: ${parentItemId},
+                        item_name: ${JSON.stringify(subitemName)}
+                    ) {
+                        id
+                        name
+                    }
+                }
+            `);
+
+            return data.create_subitem || null;
+        } catch (error) {
+            console.error('Failed to create subitem:', error);
+            throw error;
+        }
+    }
+
+    async getUsers(): Promise<{ id: string; name: string; email: string }[]> {
+        try {
+            interface UsersResponse {
+                users: Array<{ id: string; name: string; email: string }>;
+            }
+            const data = await this.query<UsersResponse>(`
+                query {
+                    users(limit: 100) {
+                        id
+                        name
+                        email
+                    }
+                }
+            `);
+            return data.users || [];
+        } catch (error) {
+            console.error('Failed to get users:', error);
+            throw error;
+        }
+    }
+
+    async assignPerson(boardId: string, itemId: string, columnId: string, personIds: number[]): Promise<boolean> {
+        try {
+            const personsValue = JSON.stringify({
+                personsAndTeams: personIds.map(id => ({ id, kind: 'person' }))
+            });
+
+            interface ChangeColumnResponse {
+                change_column_value: { id: string };
+            }
+            await this.query<ChangeColumnResponse>(`
+                mutation {
+                    change_column_value(
+                        board_id: ${boardId},
+                        item_id: ${itemId},
+                        column_id: ${JSON.stringify(columnId)},
+                        value: ${JSON.stringify(personsValue)}
+                    ) {
+                        id
+                    }
+                }
+            `);
+            return true;
+        } catch (error) {
+            console.error('Failed to assign person:', error);
+            throw error;
+        }
+    }
+
+    async assignPersonToSubitem(parentItemId: string, subitemId: string, columnId: string, personIds: number[]): Promise<boolean> {
+        try {
+            // For subitems, we need to get the subitem's board ID first
+            interface SubitemBoardResponse {
+                items: Array<{ board: { id: string } }>;
+            }
+            const boardData = await this.query<SubitemBoardResponse>(`
+                query {
+                    items(ids: [${subitemId}]) {
+                        board { id }
+                    }
+                }
+            `);
+
+            const subitemBoardId = boardData.items?.[0]?.board?.id;
+            if (!subitemBoardId) {
+                throw new Error('Could not find subitem board');
+            }
+
+            return await this.assignPerson(subitemBoardId, subitemId, columnId, personIds);
+        } catch (error) {
+            console.error('Failed to assign person to subitem:', error);
             throw error;
         }
     }
@@ -725,7 +889,9 @@ class MondayView extends ItemView {
     private currentBoardData: BoardData | null = null;
     private statusFilter: SidebarFilter = { selected: new Set(), mode: 'include' };
     private groupFilter: SidebarFilter = { selected: new Set(), mode: 'include' };
+    private personFilter: string | null = null; // Filter by team member name
     private availableStatuses: Map<string, string[]> = new Map(); // columnId -> status labels
+    private expandedItems: Set<string> = new Set(); // Track expanded items for subitems
 
     constructor(leaf: WorkspaceLeaf, plugin: MondayIntegrationPlugin) {
         super(leaf);
@@ -745,9 +911,9 @@ class MondayView extends ItemView {
     }
 
     async onOpen() {
-        // Use default board if set and no board currently selected
-        if (!this.selectedBoardId && this.plugin.settings.defaultBoardId) {
-            this.selectedBoardId = this.plugin.settings.defaultBoardId;
+        // Use shared board selection, or fall back to default board
+        if (!this.selectedBoardId) {
+            this.selectedBoardId = this.plugin.currentBoardId || this.plugin.settings.defaultBoardId || null;
         }
         await this.render();
     }
@@ -799,11 +965,15 @@ class MondayView extends ItemView {
         }
 
         selectEl.addEventListener('change', (e) => {
-            this.selectedBoardId = (e.target as HTMLSelectElement).value;
+            const boardId = (e.target as HTMLSelectElement).value;
+            this.selectedBoardId = boardId;
             this.statusFilter = { selected: new Set(), mode: 'include' };
             this.groupFilter = { selected: new Set(), mode: 'include' };
+            this.personFilter = null;
             this.currentBoardData = null;
             void this.loadAndRenderBoard(container);
+            // Sync to team view
+            this.plugin.syncBoardSelection(boardId, 'main');
         });
 
         // Filters container (populated after board is loaded)
@@ -1117,6 +1287,15 @@ class MondayView extends ItemView {
             });
         }
 
+        // Apply person filter
+        if (this.personFilter) {
+            const peopleColumns = boardData.columns.filter(c => c.type === 'people' || c.type === 'multiple-person');
+            filteredItems = filteredItems.filter(item => {
+                const assignees = this.getItemAssignees(item, peopleColumns);
+                return assignees.includes(this.personFilter!);
+            });
+        }
+
         if (filteredItems.length === 0) {
             container.createEl('p', { text: 'No items match the filters.', cls: 'monday-sidebar-hint' });
             return;
@@ -1135,10 +1314,48 @@ class MondayView extends ItemView {
         // Render grouped items
         for (const [groupName, items] of groupedItems) {
             const groupEl = container.createEl('div', { cls: 'monday-sidebar-group' });
-            groupEl.createEl('div', { text: groupName, cls: 'monday-sidebar-group-title' });
+            const groupTitleEl = groupEl.createEl('div', { text: groupName, cls: 'monday-sidebar-group-title' });
+
+            // Apply rotating group colours
+            const groupColors = ['#00c875', '#fdab3d', '#a25ddc', '#579bfc', '#e2445c'];
+            const colorIndex = Array.from(groupedItems.keys()).indexOf(groupName) % groupColors.length;
+            const hexColor = groupColors[colorIndex];
+            groupTitleEl.style.borderLeftColor = hexColor;
+            groupTitleEl.style.color = hexColor;
 
             for (const item of items) {
-                const itemEl = groupEl.createEl('div', { cls: 'monday-sidebar-item monday-sidebar-item-clickable' });
+                const itemWrapper = groupEl.createEl('div', { cls: 'monday-sidebar-item-wrapper' });
+                const itemEl = itemWrapper.createEl('div', { cls: 'monday-sidebar-item monday-sidebar-item-clickable' });
+
+                // Expand/collapse arrow for items with subitems
+                const hasSubitems = item.subitems && item.subitems.length > 0;
+                const isExpanded = this.expandedItems.has(item.id);
+
+                if (hasSubitems) {
+                    const expandBtn = itemEl.createEl('span', {
+                        cls: `monday-expand-btn ${isExpanded ? 'expanded' : ''}`,
+                        text: isExpanded ? '▼' : '▶'
+                    });
+                    expandBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (this.expandedItems.has(item.id)) {
+                            this.expandedItems.delete(item.id);
+                        } else {
+                            this.expandedItems.add(item.id);
+                        }
+                        // Re-render the filtered items
+                        const itemsContainer = this.containerEl.querySelector('.monday-sidebar-items') as HTMLElement;
+                        if (itemsContainer && this.currentBoardData) {
+                            this.renderFilteredItems(itemsContainer, this.currentBoardData);
+                        }
+                    });
+                } else {
+                    // No subtasks - show simple bullet icon
+                    itemEl.createEl('span', {
+                        cls: 'monday-no-subtasks-icon',
+                        text: '○'
+                    });
+                }
 
                 // Item name (clickable to create note)
                 const nameEl = itemEl.createEl('span', { text: item.name, cls: 'monday-sidebar-item-name' });
@@ -1201,6 +1418,102 @@ class MondayView extends ItemView {
                     e.stopPropagation();
                     this.showItemContextMenu(e, item, boardData);
                 });
+
+                // Render subitems if expanded
+                if (hasSubitems && isExpanded && item.subitems) {
+                    const subitemsContainer = itemWrapper.createEl('div', { cls: 'monday-subitems-container' });
+
+                    let filteredSubitemsCount = 0;
+
+                    for (const subitem of item.subitems) {
+                        // Apply status filter to subitems
+                        // Note: Subitems have their own column IDs, so we search all column_values
+                        // for status-like content (those with index property in JSON value)
+                        if (this.statusFilter.selected.size > 0) {
+                            let subitemStatus = '';
+
+                            // Find status column value by looking for one with index property (status indicator)
+                            for (const cv of subitem.column_values) {
+                                if (cv.value) {
+                                    try {
+                                        const valueObj = JSON.parse(cv.value);
+                                        // Status columns have an 'index' property
+                                        if (typeof valueObj?.index === 'number') {
+                                            subitemStatus = cv.text || '';
+                                            break;
+                                        }
+                                    } catch {
+                                        // Not JSON, skip
+                                    }
+                                }
+                            }
+
+                            const isSelected = this.statusFilter.selected.has(subitemStatus);
+                            const shouldShow = this.statusFilter.mode === 'include' ? isSelected : !isSelected;
+                            if (!shouldShow) continue;
+                        }
+
+                        filteredSubitemsCount++;
+                        const subitemEl = subitemsContainer.createEl('div', { cls: 'monday-subitem monday-subitem-clickable' });
+
+                        subitemEl.createEl('span', { text: '└─', cls: 'monday-subitem-prefix' });
+                        const subitemNameEl = subitemEl.createEl('span', { text: subitem.name, cls: 'monday-subitem-name' });
+
+                        // Click handler to create note for subitem
+                        subitemNameEl.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            void this.handleSubitemClick(subitem, item, boardData);
+                        });
+
+                        // Context menu for subitem (right-click)
+                        subitemEl.addEventListener('contextmenu', (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            this.showSubitemContextMenu(e, subitem, item, boardData);
+                        });
+
+                        // Status badge for subitem - find by index property (status indicator)
+                        for (const cv of subitem.column_values) {
+                            if (cv.value && cv.text) {
+                                try {
+                                    const valueObj = JSON.parse(cv.value);
+                                    if (typeof valueObj?.index === 'number') {
+                                        const statusBadge = subitemEl.createEl('span', {
+                                            text: cv.text,
+                                            cls: 'monday-subitem-status'
+                                        });
+                                        if (valueObj.label_style?.color) {
+                                            statusBadge.style.backgroundColor = valueObj.label_style.color;
+                                        }
+                                        break;
+                                    }
+                                } catch {
+                                    // Not JSON, skip
+                                }
+                            }
+                        }
+                    }
+
+                    // Show hint if all subitems were filtered out
+                    if (filteredSubitemsCount === 0) {
+                        const hintEl = subitemsContainer.createEl('div', { cls: 'monday-subitem monday-subitems-filtered-hint' });
+                        hintEl.createEl('span', { text: '└─', cls: 'monday-subitem-prefix' });
+                        hintEl.createEl('span', { text: `(${item.subitems.length} subtasks hidden by filter)`, cls: 'monday-subitem-hint-text' });
+                    }
+
+                    // Add subtask button
+                    const addSubtaskBtn = subitemsContainer.createEl('div', { cls: 'monday-add-subtask' });
+                    addSubtaskBtn.createEl('span', { text: '└─', cls: 'monday-subitem-prefix' });
+                    addSubtaskBtn.createEl('span', { text: '+ Add subtask', cls: 'monday-add-subtask-text' });
+                    addSubtaskBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        new CreateSubtaskModal(this.app, item.name, async (subtaskName) => {
+                            if (subtaskName) {
+                                await this.createSubtask(item, subtaskName);
+                            }
+                        }).open();
+                    });
+                }
             }
         }
 
@@ -1330,6 +1643,136 @@ class MondayView extends ItemView {
         if (personCol?.text) {
             content += `- **Assigned:** ${personCol.text}\n`;
         }
+
+        // Add subtasks section with links
+        if (item.subitems && item.subitems.length > 0) {
+            content += `\n## Subtasks\n\n`;
+            for (const subitem of item.subitems) {
+                const subitemStatus = subitem.column_values.find(cv => {
+                    const col = boardData.columns.find(c => c.id === cv.id);
+                    return col?.type === 'status';
+                });
+                const statusText = subitemStatus?.text ? ` - ${subitemStatus.text}` : '';
+                const subitemNoteName = this.generateSubitemNoteName(subitem, item, boardData);
+                content += `- [ ] [[${subitemNoteName}]]${statusText}\n`;
+            }
+        }
+
+        content += `\n## Notes\n\n`;
+
+        // Create the file
+        const file = await app.vault.create(notePath, content);
+        await app.workspace.openLinkText(notePath, '', false);
+        new Notice(`Created note: ${file.basename}`);
+    }
+
+    private async handleSubitemClick(subitem: Subitem, parentItem: Item, boardData: BoardData) {
+        const plugin = this.plugin;
+        const app = this.app;
+
+        // Generate note path using template settings
+        const noteName = this.generateSubitemNoteName(subitem, parentItem, boardData);
+        const noteFolder = plugin.settings.noteFolder || 'Monday';
+        const notePath = normalizePath(`${noteFolder}/${noteName}.md`);
+
+        // Check if file exists
+        const existingFile = app.vault.getAbstractFileByPath(notePath);
+
+        if (existingFile && existingFile instanceof TFile) {
+            // File exists - open it
+            await app.workspace.openLinkText(notePath, '', false);
+        } else {
+            // Create the note
+            await this.createNoteForSubitem(subitem, parentItem, boardData, notePath);
+        }
+    }
+
+    private generateSubitemNoteName(subitem: Subitem, parentItem: Item, boardData: BoardData): string {
+        const template = this.plugin.settings.noteNameTemplate || '{name}';
+        const boardName = boardData.name || 'Unknown Board';
+        const groupName = parentItem.group?.title || 'No Group';
+
+        // Sanitise for filename
+        const sanitise = (str: string) => str.replace(/[\\/:*?"<>|]/g, '-');
+
+        return template
+            .replace('{name}', sanitise(subitem.name))
+            .replace('{board}', sanitise(boardName))
+            .replace('{group}', sanitise(groupName))
+            .replace('{id}', subitem.id);
+    }
+
+    private async createNoteForSubitem(subitem: Subitem, parentItem: Item, boardData: BoardData, notePath: string) {
+        const app = this.app;
+        const plugin = this.plugin;
+
+        // Ensure folder exists
+        const folderPath = notePath.substring(0, notePath.lastIndexOf('/'));
+        if (folderPath && !app.vault.getAbstractFileByPath(folderPath)) {
+            await app.vault.createFolder(folderPath);
+        }
+
+        // Get subitem status
+        const statusCol = subitem.column_values.find(cv => {
+            const col = boardData.columns.find(c => c.id === cv.id);
+            return col?.type === 'status';
+        });
+
+        // Build frontmatter
+        const frontmatter: Record<string, string | string[]> = {
+            title: subitem.name,
+            monday_id: subitem.id,
+            monday_parent_id: parentItem.id,
+            monday_parent: parentItem.name,
+            monday_board: boardData.name,
+            monday_board_id: this.selectedBoardId || '',
+            status: statusCol?.text || '',
+            type: 'subtask',
+            created: new Date().toISOString().split('T')[0],
+            tags: ['monday', 'subtask']
+        };
+
+        // Build note content
+        let content = '---\n';
+        for (const [key, value] of Object.entries(frontmatter)) {
+            if (Array.isArray(value)) {
+                content += `${key}:\n`;
+                for (const v of value) {
+                    content += `  - ${v}\n`;
+                }
+            } else if (value) {
+                content += `${key}: "${value}"\n`;
+            }
+        }
+        content += '---\n\n';
+        content += `# ${subitem.name}\n\n`;
+
+        // Link to parent task (use template for parent note name)
+        const parentNoteName = this.generateNoteName(parentItem, boardData);
+        content += `## Parent Task\n\n`;
+        content += `[[${parentNoteName}]]\n\n`;
+
+        content += `## Details\n\n`;
+        content += `- **Board:** ${boardData.name}\n`;
+        content += `- **Parent:** ${parentItem.name}\n`;
+        content += `- **Status:** ${statusCol?.text || 'None'}\n`;
+
+        // Add sibling subtasks (other subtasks of the same parent)
+        if (parentItem.subitems && parentItem.subitems.length > 1) {
+            content += `\n## Related Subtasks\n\n`;
+            for (const sibling of parentItem.subitems) {
+                if (sibling.id !== subitem.id) {
+                    const siblingStatus = sibling.column_values.find(cv => {
+                        const col = boardData.columns.find(c => c.id === cv.id);
+                        return col?.type === 'status';
+                    });
+                    const statusText = siblingStatus?.text ? ` - ${siblingStatus.text}` : '';
+                    const siblingNoteName = this.generateSubitemNoteName(sibling, parentItem, boardData);
+                    content += `- [[${siblingNoteName}]]${statusText}\n`;
+                }
+            }
+        }
+
         content += `\n## Notes\n\n`;
 
         // Create the file
@@ -1396,6 +1839,143 @@ class MondayView extends ItemView {
                 });
         });
 
+        // Assign person option
+        const peopleColumn = boardData.columns.find(c => c.type === 'people' || c.type === 'multiple-person');
+        if (peopleColumn) {
+            const currentAssignees = this.getItemAssignees(item, [peopleColumn]);
+            menu.addItem((menuItem) => {
+                menuItem
+                    .setTitle(currentAssignees.length > 0 ? 'Reassign' : 'Assign person')
+                    .setIcon('user-plus')
+                    .onClick(() => {
+                        new AssignPersonModal(
+                            this.app,
+                            this.plugin,
+                            item.name,
+                            currentAssignees,
+                            async (userIds) => {
+                                if (userIds !== null && this.selectedBoardId) {
+                                    await this.assignPersonToItem(item, boardData, peopleColumn.id, userIds);
+                                }
+                            }
+                        ).open();
+                    });
+            });
+        }
+
+        // Add subtask option
+        menu.addItem((menuItem) => {
+            menuItem
+                .setTitle('Add subtask')
+                .setIcon('list-plus')
+                .onClick(() => {
+                    new CreateSubtaskModal(this.app, item.name, async (subtaskName) => {
+                        if (subtaskName) {
+                            await this.createSubtask(item, subtaskName);
+                        }
+                    }).open();
+                });
+        });
+
+        menu.showAtMouseEvent(event);
+    }
+
+    private showSubitemContextMenu(event: MouseEvent, subitem: Subitem, parentItem: Item, boardData: BoardData) {
+        const menu = new Menu();
+
+        // Create note option
+        menu.addItem((menuItem) => {
+            menuItem
+                .setTitle('Create note')
+                .setIcon('file-plus')
+                .onClick(() => {
+                    void this.handleSubitemClick(subitem, parentItem, boardData);
+                });
+        });
+
+        menu.addSeparator();
+
+        // Status change submenu - find status column by index property
+        let statusColumnId = '';
+        let currentStatus = '';
+        for (const cv of subitem.column_values) {
+            if (cv.value) {
+                try {
+                    const parsed = JSON.parse(cv.value);
+                    if (typeof parsed.index === 'number') {
+                        statusColumnId = cv.id;
+                        currentStatus = cv.text || '';
+                        break;
+                    }
+                } catch {
+                    // Not a status column
+                }
+            }
+        }
+
+        if (statusColumnId) {
+            // Get available statuses from parent board's status column
+            const statusColumn = boardData.columns.find(c => c.type === 'status');
+            const statusOptions = statusColumn ? (this.availableStatuses.get(statusColumn.id) || []) : [];
+
+            if (statusOptions.length > 0) {
+                menu.addItem((menuItem) => {
+                    menuItem
+                        .setTitle('Change status')
+                        .setIcon('check-circle');
+
+                    const submenu = (menuItem as unknown as MenuItemWithSubmenu).setSubmenu();
+                    for (const status of statusOptions) {
+                        submenu.addItem((subItem) => {
+                            subItem
+                                .setTitle(status)
+                                .setChecked(status === currentStatus)
+                                .onClick(() => {
+                                    if (status !== currentStatus) {
+                                        void this.changeSubitemStatus(subitem, parentItem, statusColumnId, status);
+                                    }
+                                });
+                        });
+                    }
+                });
+            }
+        }
+
+        // Assign person option - find current assignees
+        const currentAssignees: string[] = [];
+        for (const cv of subitem.column_values) {
+            if (cv.value && cv.text) {
+                try {
+                    const parsed = JSON.parse(cv.value);
+                    if (parsed.personsAndTeams !== undefined && cv.text) {
+                        const names = cv.text.split(',').map((n: string) => n.trim()).filter((n: string) => n);
+                        currentAssignees.push(...names);
+                    }
+                } catch {
+                    // Not a people column
+                }
+            }
+        }
+
+        menu.addItem((menuItem) => {
+            menuItem
+                .setTitle(currentAssignees.length > 0 ? 'Reassign' : 'Assign person')
+                .setIcon('user-plus')
+                .onClick(() => {
+                    new AssignPersonModal(
+                        this.app,
+                        this.plugin,
+                        subitem.name,
+                        currentAssignees,
+                        async (userIds) => {
+                            if (userIds !== null) {
+                                await this.assignPersonToSubitem(subitem, parentItem, boardData, userIds);
+                            }
+                        }
+                    ).open();
+                });
+        });
+
         menu.showAtMouseEvent(event);
     }
 
@@ -1421,6 +2001,20 @@ class MondayView extends ItemView {
         }
     }
 
+    private async changeSubitemStatus(subitem: Subitem, parentItem: Item, columnId: string, newStatus: string) {
+        try {
+            new Notice(`Changing status to "${newStatus}"...`);
+            await this.plugin.apiClient.changeSubitemStatus(subitem.id, columnId, newStatus);
+            new Notice(`Status updated to "${newStatus}"`);
+
+            // Refresh the board data
+            this.currentBoardData = null;
+            await this.loadAndRenderBoard(this.containerEl.children[1] as HTMLElement);
+        } catch (error) {
+            new Notice(`Failed to change status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
     private async addItemComment(item: Item, comment: string) {
         try {
             new Notice('Adding comment...');
@@ -1428,6 +2022,82 @@ class MondayView extends ItemView {
             new Notice('Comment added successfully');
         } catch (error) {
             new Notice(`Failed to add comment: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    private async createSubtask(item: Item, subtaskName: string) {
+        try {
+            new Notice('Creating subtask...');
+            const result = await this.plugin.apiClient.createSubitem(item.id, subtaskName);
+            if (result) {
+                new Notice(`Subtask created: ${result.name}`);
+                // Expand the item to show the new subtask
+                this.expandedItems.add(item.id);
+                // Refresh to show the new subtask
+                await this.loadAndRenderBoard(this.containerEl.children[1] as HTMLElement);
+            } else {
+                new Notice('Failed to create subtask');
+            }
+        } catch (error) {
+            new Notice(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    private async assignPersonToItem(item: Item, boardData: BoardData, columnId: string, userIds: number[]) {
+        if (!this.selectedBoardId) return;
+
+        try {
+            new Notice('Updating assignment...');
+            await this.plugin.apiClient.assignPerson(this.selectedBoardId, item.id, columnId, userIds);
+            new Notice(userIds.length > 0 ? 'Person assigned' : 'Assignment cleared');
+
+            // Refresh the board data
+            this.currentBoardData = null;
+            await this.loadAndRenderBoard(this.containerEl.children[1] as HTMLElement);
+        } catch (error) {
+            new Notice(`Failed to assign: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    private async assignPersonToSubitem(subitem: Subitem, parentItem: Item, boardData: BoardData, userIds: number[]) {
+        try {
+            // Find people column - subitems may have different column IDs
+            // We'll try to find any people column in the subitem's values
+            let peopleColumnId = '';
+            for (const cv of subitem.column_values) {
+                if (cv.value) {
+                    try {
+                        const parsed = JSON.parse(cv.value);
+                        if (parsed.personsAndTeams !== undefined) {
+                            peopleColumnId = cv.id;
+                            break;
+                        }
+                    } catch {
+                        // Not a people column
+                    }
+                }
+            }
+
+            // Fall back to finding by board column type if no value found
+            if (!peopleColumnId) {
+                const peopleCol = boardData.columns.find(c => c.type === 'people' || c.type === 'multiple-person');
+                if (peopleCol) peopleColumnId = peopleCol.id;
+            }
+
+            if (!peopleColumnId) {
+                new Notice('Could not find people column');
+                return;
+            }
+
+            new Notice('Updating assignment...');
+            await this.plugin.apiClient.assignPersonToSubitem(parentItem.id, subitem.id, peopleColumnId, userIds);
+            new Notice(userIds.length > 0 ? 'Person assigned' : 'Assignment cleared');
+
+            // Refresh
+            this.currentBoardData = null;
+            await this.loadAndRenderBoard(this.containerEl.children[1] as HTMLElement);
+        } catch (error) {
+            new Notice(`Failed to assign: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
     }
 
@@ -1442,6 +2112,445 @@ class MondayView extends ItemView {
             await this.render();
         } catch (error) {
             new Notice(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    private getItemAssignees(item: Item, peopleColumns: Column[]): string[] {
+        const assignees: string[] = [];
+
+        for (const col of peopleColumns) {
+            const colValue = item.column_values.find(cv => cv.id === col.id);
+            if (colValue?.value) {
+                try {
+                    const parsed = JSON.parse(colValue.value);
+                    if (parsed.personsAndTeams && Array.isArray(parsed.personsAndTeams)) {
+                        if (colValue.text) {
+                            const names = colValue.text.split(',').map((n: string) => n.trim()).filter((n: string) => n);
+                            assignees.push(...names);
+                        }
+                    }
+                } catch {
+                    if (colValue.text) {
+                        const names = colValue.text.split(',').map((n: string) => n.trim()).filter((n: string) => n);
+                        assignees.push(...names);
+                    }
+                }
+            }
+        }
+
+        return [...new Set(assignees)];
+    }
+
+    // Public method to set board from other views (for sync)
+    setBoard(boardId: string) {
+        if (this.selectedBoardId === boardId) return; // Already on this board
+        this.selectedBoardId = boardId;
+        this.statusFilter = { selected: new Set(), mode: 'include' };
+        this.groupFilter = { selected: new Set(), mode: 'include' };
+        this.personFilter = null;
+        this.currentBoardData = null;
+        void this.render();
+    }
+
+    // Public method to set person filter from Team View
+    setPersonFilter(personName: string | null) {
+        this.personFilter = personName;
+        if (this.currentBoardData) {
+            const container = this.containerEl.children[1] as HTMLElement;
+            const itemsContainer = container.querySelector('.monday-sidebar-items') as HTMLElement;
+            if (itemsContainer) {
+                this.renderFilteredItems(itemsContainer, this.currentBoardData);
+            }
+            // Update the person filter indicator
+            this.updatePersonFilterIndicator(container);
+        }
+    }
+
+    private updatePersonFilterIndicator(container: HTMLElement) {
+        // Remove existing indicator
+        const existing = container.querySelector('.monday-person-filter-indicator');
+        if (existing) existing.remove();
+
+        if (this.personFilter) {
+            const filtersContainer = container.querySelector('.monday-sidebar-filters') as HTMLElement;
+            if (filtersContainer) {
+                const indicator = filtersContainer.createEl('div', { cls: 'monday-person-filter-indicator' });
+                indicator.createEl('span', { text: `Filtered: ${this.personFilter}`, cls: 'monday-person-filter-text' });
+                const clearBtn = indicator.createEl('span', { text: '✕', cls: 'monday-person-filter-clear' });
+                clearBtn.addEventListener('click', () => {
+                    this.setPersonFilter(null);
+                });
+            }
+        }
+    }
+
+    async onClose() {
+        // Cleanup if needed
+    }
+}
+
+// ============================================================================
+// Team Summary View
+// ============================================================================
+
+class MondayTeamView extends ItemView {
+    private plugin: MondayIntegrationPlugin;
+    private selectedBoardId: string = '';
+
+    constructor(leaf: WorkspaceLeaf, plugin: MondayIntegrationPlugin) {
+        super(leaf);
+        this.plugin = plugin;
+    }
+
+    getViewType(): string {
+        return MONDAY_TEAM_VIEW_TYPE;
+    }
+
+    getDisplayText(): string {
+        return 'Monday Team';
+    }
+
+    getIcon(): string {
+        return 'users';
+    }
+
+    async onOpen() {
+        // Use shared board selection, or fall back to default board
+        if (!this.selectedBoardId) {
+            this.selectedBoardId = this.plugin.currentBoardId || this.plugin.settings.defaultBoardId || '';
+        }
+        await this.render();
+    }
+
+    async render() {
+        const container = this.containerEl.children[1];
+        container.empty();
+        container.addClass('monday-team-sidebar');
+
+        // Check for API token
+        if (!this.plugin.settings.apiToken) {
+            const errorEl = container.createEl('div', { cls: 'monday-sidebar-error' });
+            errorEl.createEl('p', { text: 'API token not configured.' });
+            const settingsBtn = errorEl.createEl('button', { text: 'Open settings' });
+            settingsBtn.addEventListener('click', () => {
+                // @ts-ignore - Obsidian internal API
+                this.app.setting.open();
+                // @ts-ignore
+                this.app.setting.openTabById('monday-integration');
+            });
+            return;
+        }
+
+        // Header
+        const headerEl = container.createEl('div', { cls: 'monday-sidebar-header' });
+        headerEl.createEl('h4', { text: 'Team Summary' });
+
+        const refreshBtn = headerEl.createEl('button', { cls: 'monday-sidebar-refresh' });
+        refreshBtn.setText('↻');
+        refreshBtn.title = 'Refresh';
+        refreshBtn.addEventListener('click', () => void this.render());
+
+        // Board selector
+        const selectorEl = container.createEl('div', { cls: 'monday-board-selector' });
+        const selectEl = selectorEl.createEl('select', { cls: 'monday-board-select' });
+
+        const defaultOption = selectEl.createEl('option', { text: 'Select a board...', value: '' });
+        defaultOption.disabled = true;
+        defaultOption.selected = !this.selectedBoardId;
+
+        for (const board of this.plugin.settings.cachedBoards) {
+            const option = selectEl.createEl('option', {
+                text: board.name,
+                value: board.id
+            });
+            if (board.id === this.selectedBoardId) {
+                option.selected = true;
+            }
+        }
+
+        selectEl.addEventListener('change', (e) => {
+            const boardId = (e.target as HTMLSelectElement).value;
+            this.selectedBoardId = boardId;
+            void this.loadAndRenderTeamStats(container as HTMLElement);
+            // Sync to main view
+            this.plugin.syncBoardSelection(boardId, 'team');
+        });
+
+        // Team stats container
+        container.createEl('div', { cls: 'monday-team-stats' });
+
+        if (this.selectedBoardId) {
+            await this.loadAndRenderTeamStats(container as HTMLElement);
+        } else if (this.plugin.settings.cachedBoards.length === 0) {
+            const statsContainer = container.querySelector('.monday-team-stats') as HTMLElement;
+            statsContainer.createEl('p', { text: 'Click refresh in main view to load boards.', cls: 'monday-sidebar-hint' });
+        }
+    }
+
+    private async loadAndRenderTeamStats(container: HTMLElement) {
+        const statsContainer = container.querySelector('.monday-team-stats') as HTMLElement;
+        if (!statsContainer) return;
+
+        statsContainer.empty();
+
+        // Show loading
+        const loadingEl = statsContainer.createEl('div', { cls: 'monday-loading' });
+        loadingEl.createEl('div', { cls: 'monday-spinner' });
+        loadingEl.createEl('span', { text: 'Loading team data...', cls: 'monday-loading-text' });
+
+        try {
+            const boardData = await this.plugin.apiClient.getBoardData(this.selectedBoardId, 500);
+            statsContainer.empty();
+
+            if (!boardData || boardData.items.length === 0) {
+                statsContainer.createEl('p', { text: 'No items found.', cls: 'monday-sidebar-hint' });
+                return;
+            }
+
+            // Aggregate team stats
+            const teamStats = this.aggregateTeamStats(boardData);
+
+            if (teamStats.length === 0) {
+                statsContainer.createEl('p', { text: 'No assigned tasks found.', cls: 'monday-sidebar-hint' });
+                return;
+            }
+
+            // Render team stats
+            this.renderTeamStats(statsContainer, teamStats);
+
+        } catch (error) {
+            statsContainer.empty();
+            statsContainer.createEl('p', {
+                text: `Error: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                cls: 'monday-sidebar-error'
+            });
+        }
+    }
+
+    private aggregateTeamStats(boardData: BoardData): TeamMemberStats[] {
+        const statsMap = new Map<string, TeamMemberStats>();
+
+        // Find people column(s) and status column(s)
+        const peopleColumns = boardData.columns.filter(c => c.type === 'people' || c.type === 'multiple-person');
+        const statusColumns = boardData.columns.filter(c => c.type === 'status');
+        const dateColumns = boardData.columns.filter(c => c.type === 'date' || c.type === 'timeline');
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        for (const item of boardData.items) {
+            // Get assignees for this item
+            const assignees = this.getAssignees(item, peopleColumns);
+            if (assignees.length === 0) continue;
+
+            // Get status
+            const status = this.getItemStatus(item, statusColumns);
+            const isDone = status.toLowerCase().includes('done');
+            const isWorkingOnIt = status.toLowerCase().includes('working') ||
+                                   status.toLowerCase().includes('in progress') ||
+                                   status.toLowerCase().includes('active');
+
+            // Check if overdue (has due date, not done, past due)
+            const isOverdue = !isDone && this.isItemOverdue(item, dateColumns, today);
+
+            // Update stats for each assignee
+            for (const assignee of assignees) {
+                if (!statsMap.has(assignee)) {
+                    statsMap.set(assignee, {
+                        name: assignee,
+                        workingOnIt: 0,
+                        done: 0,
+                        overdue: 0
+                    });
+                }
+
+                const stats = statsMap.get(assignee)!;
+                if (isDone) {
+                    stats.done++;
+                } else if (isWorkingOnIt) {
+                    stats.workingOnIt++;
+                }
+                if (isOverdue) {
+                    stats.overdue++;
+                }
+            }
+        }
+
+        // Sort by name
+        return Array.from(statsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+    }
+
+    private getAssignees(item: Item, peopleColumns: Column[]): string[] {
+        const assignees: string[] = [];
+
+        for (const col of peopleColumns) {
+            const colValue = item.column_values.find(cv => cv.id === col.id);
+            if (colValue?.value) {
+                try {
+                    const parsed = JSON.parse(colValue.value);
+                    // People column format: { personsAndTeams: [{ id, kind }] }
+                    if (parsed.personsAndTeams && Array.isArray(parsed.personsAndTeams)) {
+                        // Use the text field which contains names
+                        if (colValue.text) {
+                            const names = colValue.text.split(',').map((n: string) => n.trim()).filter((n: string) => n);
+                            assignees.push(...names);
+                        }
+                    }
+                } catch {
+                    // If parsing fails, try using text directly
+                    if (colValue.text) {
+                        const names = colValue.text.split(',').map((n: string) => n.trim()).filter((n: string) => n);
+                        assignees.push(...names);
+                    }
+                }
+            }
+        }
+
+        return [...new Set(assignees)]; // Remove duplicates
+    }
+
+    private getItemStatus(item: Item, statusColumns: Column[]): string {
+        for (const col of statusColumns) {
+            const colValue = item.column_values.find(cv => cv.id === col.id);
+            if (colValue?.text) {
+                return colValue.text;
+            }
+        }
+        return '';
+    }
+
+    private isItemOverdue(item: Item, dateColumns: Column[], today: Date): boolean {
+        for (const col of dateColumns) {
+            const colValue = item.column_values.find(cv => cv.id === col.id);
+            if (colValue?.value) {
+                try {
+                    const parsed = JSON.parse(colValue.value);
+                    // Date column format: { date: "YYYY-MM-DD" }
+                    // Timeline format: { from: "YYYY-MM-DD", to: "YYYY-MM-DD" }
+                    const dateStr = parsed.date || parsed.to;
+                    if (dateStr) {
+                        const dueDate = new Date(dateStr);
+                        dueDate.setHours(0, 0, 0, 0);
+                        if (dueDate < today) {
+                            return true;
+                        }
+                    }
+                } catch {
+                    // Skip if parsing fails
+                }
+            }
+        }
+        return false;
+    }
+
+    private renderTeamStats(container: HTMLElement, stats: TeamMemberStats[]) {
+        for (const member of stats) {
+            const memberEl = container.createEl('div', { cls: 'monday-team-member monday-team-member-clickable' });
+            memberEl.title = `Click to filter by ${member.name}`;
+
+            // Click handler to filter main view
+            memberEl.addEventListener('click', () => {
+                this.filterMainViewByPerson(member.name);
+            });
+
+            // Name
+            memberEl.createEl('span', { text: member.name, cls: 'monday-team-member-name' });
+
+            // Stats badges container
+            const badgesEl = memberEl.createEl('div', { cls: 'monday-team-badges' });
+
+            // Working on it badge (blue/orange)
+            if (member.workingOnIt > 0) {
+                const workingBadge = badgesEl.createEl('span', {
+                    text: String(member.workingOnIt),
+                    cls: 'monday-team-badge monday-team-badge-working'
+                });
+                workingBadge.title = 'Working on it';
+            }
+
+            // Done badge (green)
+            if (member.done > 0) {
+                const doneBadge = badgesEl.createEl('span', {
+                    text: String(member.done),
+                    cls: 'monday-team-badge monday-team-badge-done'
+                });
+                doneBadge.title = 'Done';
+            }
+
+            // Overdue badge (red)
+            if (member.overdue > 0) {
+                const overdueBadge = badgesEl.createEl('span', {
+                    text: String(member.overdue),
+                    cls: 'monday-team-badge monday-team-badge-overdue'
+                });
+                overdueBadge.title = 'Overdue';
+            }
+
+            // Show dash if no stats
+            if (member.workingOnIt === 0 && member.done === 0 && member.overdue === 0) {
+                badgesEl.createEl('span', { text: '-', cls: 'monday-team-no-tasks' });
+            }
+        }
+
+        // Summary row
+        const totalWorking = stats.reduce((sum, s) => sum + s.workingOnIt, 0);
+        const totalDone = stats.reduce((sum, s) => sum + s.done, 0);
+        const totalOverdue = stats.reduce((sum, s) => sum + s.overdue, 0);
+
+        const summaryEl = container.createEl('div', { cls: 'monday-team-summary' });
+        summaryEl.createEl('span', { text: 'Total:', cls: 'monday-team-summary-label' });
+
+        const summaryBadges = summaryEl.createEl('div', { cls: 'monday-team-badges' });
+
+        const workingSummary = summaryBadges.createEl('span', {
+            text: String(totalWorking),
+            cls: 'monday-team-badge monday-team-badge-working'
+        });
+        workingSummary.title = 'Total working';
+
+        const doneSummary = summaryBadges.createEl('span', {
+            text: String(totalDone),
+            cls: 'monday-team-badge monday-team-badge-done'
+        });
+        doneSummary.title = 'Total done';
+
+        const overdueSummary = summaryBadges.createEl('span', {
+            text: String(totalOverdue),
+            cls: 'monday-team-badge monday-team-badge-overdue'
+        });
+        overdueSummary.title = 'Total overdue';
+    }
+
+    // Public method to set board from other views (for sync)
+    setBoard(boardId: string) {
+        if (this.selectedBoardId === boardId) return; // Already on this board
+        this.selectedBoardId = boardId;
+        void this.render();
+    }
+
+    private filterMainViewByPerson(personName: string) {
+        const { workspace } = this.app;
+
+        // Find the main Monday view
+        const mondayLeaves = workspace.getLeavesOfType(MONDAY_VIEW_TYPE);
+        if (mondayLeaves.length > 0) {
+            const mondayView = mondayLeaves[0].view as MondayView;
+            mondayView.setPersonFilter(personName);
+            workspace.revealLeaf(mondayLeaves[0]);
+            new Notice(`Filtered by: ${personName}`);
+        } else {
+            // Open the main view first, then filter
+            void this.plugin.activateView().then(() => {
+                const leaves = workspace.getLeavesOfType(MONDAY_VIEW_TYPE);
+                if (leaves.length > 0) {
+                    const mondayView = leaves[0].view as MondayView;
+                    // Wait a moment for the view to load
+                    setTimeout(() => {
+                        mondayView.setPersonFilter(personName);
+                        new Notice(`Filtered by: ${personName}`);
+                    }, 500);
+                }
+            });
         }
     }
 
@@ -1549,6 +2658,202 @@ class AddCommentModal extends Modal {
 
         // Focus the textarea
         setTimeout(() => textArea.focus(), 50);
+    }
+
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
+    }
+}
+
+// ============================================================================
+// Create Subtask Modal
+// ============================================================================
+
+class CreateSubtaskModal extends Modal {
+    private parentItemName: string;
+    private callback: (subtaskName: string | null) => void;
+
+    constructor(app: App, parentItemName: string, callback: (subtaskName: string | null) => void) {
+        super(app);
+        this.parentItemName = parentItemName;
+        this.callback = callback;
+    }
+
+    onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.addClass('monday-subtask-modal');
+
+        contentEl.createEl('h3', { text: 'Add subtask' });
+        contentEl.createEl('p', { text: `Adding subtask to: ${this.parentItemName}`, cls: 'monday-subtask-parent-name' });
+
+        const inputEl = contentEl.createEl('input', {
+            cls: 'monday-subtask-input',
+            attr: {
+                type: 'text',
+                placeholder: 'Enter subtask name...'
+            }
+        });
+
+        const buttonContainer = contentEl.createEl('div', { cls: 'monday-modal-buttons' });
+
+        const submitBtn = buttonContainer.createEl('button', { text: 'Create subtask', cls: 'mod-cta' });
+        submitBtn.addEventListener('click', () => {
+            const subtaskName = inputEl.value.trim();
+            if (subtaskName) {
+                this.callback(subtaskName);
+                this.close();
+            } else {
+                new Notice('Please enter a subtask name');
+            }
+        });
+
+        const cancelBtn = buttonContainer.createEl('button', { text: 'Cancel' });
+        cancelBtn.addEventListener('click', () => {
+            this.callback(null);
+            this.close();
+        });
+
+        // Handle Enter key
+        inputEl.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const subtaskName = inputEl.value.trim();
+                if (subtaskName) {
+                    this.callback(subtaskName);
+                    this.close();
+                }
+            }
+        });
+
+        // Focus the input
+        setTimeout(() => inputEl.focus(), 50);
+    }
+
+    onClose() {
+        const { contentEl } = this;
+        contentEl.empty();
+    }
+}
+
+// ============================================================================
+// Assign Person Modal
+// ============================================================================
+
+interface MondayUser {
+    id: string;
+    name: string;
+    email: string;
+}
+
+class AssignPersonModal extends Modal {
+    private plugin: MondayIntegrationPlugin;
+    private itemName: string;
+    private currentAssignees: string[];
+    private callback: (userIds: number[] | null) => void;
+    private users: MondayUser[] = [];
+    private selectedUserIds: Set<number> = new Set();
+
+    constructor(
+        app: App,
+        plugin: MondayIntegrationPlugin,
+        itemName: string,
+        currentAssignees: string[],
+        callback: (userIds: number[] | null) => void
+    ) {
+        super(app);
+        this.plugin = plugin;
+        this.itemName = itemName;
+        this.currentAssignees = currentAssignees;
+        this.callback = callback;
+    }
+
+    async onOpen() {
+        const { contentEl } = this;
+        contentEl.empty();
+        contentEl.addClass('monday-assign-modal');
+
+        contentEl.createEl('h3', { text: 'Assign person' });
+        contentEl.createEl('p', { text: this.itemName, cls: 'monday-assign-item-name' });
+
+        if (this.currentAssignees.length > 0) {
+            contentEl.createEl('p', {
+                text: `Currently assigned: ${this.currentAssignees.join(', ')}`,
+                cls: 'monday-assign-current'
+            });
+        }
+
+        // Loading indicator
+        const loadingEl = contentEl.createEl('div', { cls: 'monday-loading' });
+        loadingEl.createEl('div', { cls: 'monday-spinner' });
+        loadingEl.createEl('span', { text: 'Loading users...', cls: 'monday-loading-text' });
+
+        try {
+            this.users = await this.plugin.apiClient.getUsers();
+            loadingEl.remove();
+
+            // User list
+            const userListEl = contentEl.createEl('div', { cls: 'monday-user-list' });
+
+            for (const user of this.users) {
+                const userEl = userListEl.createEl('div', { cls: 'monday-user-item' });
+
+                const checkbox = userEl.createEl('input', {
+                    attr: { type: 'checkbox', id: `user-${user.id}` }
+                });
+
+                // Pre-select if currently assigned
+                if (this.currentAssignees.some(a => a.toLowerCase() === user.name.toLowerCase())) {
+                    checkbox.checked = true;
+                    this.selectedUserIds.add(parseInt(user.id));
+                }
+
+                checkbox.addEventListener('change', () => {
+                    const userId = parseInt(user.id);
+                    if (checkbox.checked) {
+                        this.selectedUserIds.add(userId);
+                    } else {
+                        this.selectedUserIds.delete(userId);
+                    }
+                });
+
+                const label = userEl.createEl('label', {
+                    text: user.name,
+                    attr: { for: `user-${user.id}` }
+                });
+                label.createEl('span', { text: ` (${user.email})`, cls: 'monday-user-email' });
+            }
+
+            // Buttons
+            const buttonContainer = contentEl.createEl('div', { cls: 'monday-modal-buttons' });
+
+            const clearBtn = buttonContainer.createEl('button', { text: 'Clear all' });
+            clearBtn.addEventListener('click', () => {
+                this.selectedUserIds.clear();
+                userListEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+                    (cb as HTMLInputElement).checked = false;
+                });
+            });
+
+            const submitBtn = buttonContainer.createEl('button', { text: 'Assign', cls: 'mod-cta' });
+            submitBtn.addEventListener('click', () => {
+                this.callback(Array.from(this.selectedUserIds));
+                this.close();
+            });
+
+            const cancelBtn = buttonContainer.createEl('button', { text: 'Cancel' });
+            cancelBtn.addEventListener('click', () => {
+                this.callback(null);
+                this.close();
+            });
+
+        } catch (error) {
+            loadingEl.remove();
+            contentEl.createEl('p', {
+                text: `Error loading users: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                cls: 'monday-sidebar-error'
+            });
+        }
     }
 
     onClose() {
@@ -2057,6 +3362,7 @@ export default class MondayIntegrationPlugin extends Plugin {
     settings: MondayIntegrationSettings;
     apiClient: MondayApiClient;
     statusBar: StatusBarManager;
+    currentBoardId: string = ''; // Shared board selection between views
 
     async onload() {
         console.debug('Loading Monday.com Integration plugin');
@@ -2078,6 +3384,12 @@ export default class MondayIntegrationPlugin extends Plugin {
             (leaf) => new MondayView(leaf, this)
         );
 
+        // Register team summary view
+        this.registerView(
+            MONDAY_TEAM_VIEW_TYPE,
+            (leaf) => new MondayTeamView(leaf, this)
+        );
+
         // Register code block processor
         this.registerMarkdownCodeBlockProcessor(
             'monday',
@@ -2091,6 +3403,11 @@ export default class MondayIntegrationPlugin extends Plugin {
         // Add ribbon icon
         this.addRibbonIcon('calendar-check', 'Open Monday.com', () => {
             void this.activateView();
+        });
+
+        // Add ribbon icon for team view
+        this.addRibbonIcon('users', 'Open Monday Team Summary', () => {
+            void this.activateTeamView();
         });
 
         // Add commands
@@ -2109,6 +3426,14 @@ export default class MondayIntegrationPlugin extends Plugin {
             name: 'Open sidebar',
             callback: () => {
                 void this.activateView();
+            }
+        });
+
+        this.addCommand({
+            id: 'open-monday-team-summary',
+            name: 'Open team summary',
+            callback: () => {
+                void this.activateTeamView();
             }
         });
 
@@ -2193,6 +3518,51 @@ export default class MondayIntegrationPlugin extends Plugin {
 
         if (leaf) {
             workspace.revealLeaf(leaf);
+        }
+    }
+
+    async activateTeamView() {
+        const { workspace } = this.app;
+
+        let leaf = workspace.getLeavesOfType(MONDAY_TEAM_VIEW_TYPE)[0];
+
+        if (!leaf) {
+            const rightLeaf = workspace.getRightLeaf(false);
+            if (rightLeaf) {
+                await rightLeaf.setViewState({
+                    type: MONDAY_TEAM_VIEW_TYPE,
+                    active: true
+                });
+                leaf = rightLeaf;
+            }
+        }
+
+        if (leaf) {
+            workspace.revealLeaf(leaf);
+        }
+    }
+
+    // Sync board selection across all Monday views
+    syncBoardSelection(boardId: string, sourceView: 'main' | 'team') {
+        this.currentBoardId = boardId;
+        const { workspace } = this.app;
+
+        // Sync to main view if source was team view
+        if (sourceView === 'team') {
+            const mondayLeaves = workspace.getLeavesOfType(MONDAY_VIEW_TYPE);
+            for (const leaf of mondayLeaves) {
+                const view = leaf.view as MondayView;
+                view.setBoard(boardId);
+            }
+        }
+
+        // Sync to team view if source was main view
+        if (sourceView === 'main') {
+            const teamLeaves = workspace.getLeavesOfType(MONDAY_TEAM_VIEW_TYPE);
+            for (const leaf of teamLeaves) {
+                const view = leaf.view as MondayTeamView;
+                view.setBoard(boardId);
+            }
         }
     }
 

@@ -28,6 +28,7 @@ __export(main_exports, {
 module.exports = __toCommonJS(main_exports);
 var import_obsidian = require("obsidian");
 var MONDAY_VIEW_TYPE = "monday-view";
+var MONDAY_TEAM_VIEW_TYPE = "monday-team-view";
 var MONDAY_API_URL = "https://api.monday.com/v2";
 var DEFAULT_SETTINGS = {
   apiToken: "",
@@ -106,6 +107,15 @@ var MondayApiClient = class {
                                 value
                             }
                             group { title color }
+                            subitems {
+                                id
+                                name
+                                column_values {
+                                    id
+                                    text
+                                    value
+                                }
+                            }
                         }
                     }
                 }
@@ -139,6 +149,39 @@ var MondayApiClient = class {
       return true;
     } catch (error) {
       console.error("Failed to change status:", error);
+      throw error;
+    }
+  }
+  async changeSubitemStatus(subitemId, columnId, statusLabel) {
+    var _a, _b, _c;
+    try {
+      const boardData = await this.query(`
+                query {
+                    items(ids: [${subitemId}]) {
+                        board { id }
+                    }
+                }
+            `);
+      const subitemBoardId = (_c = (_b = (_a = boardData.items) == null ? void 0 : _a[0]) == null ? void 0 : _b.board) == null ? void 0 : _c.id;
+      if (!subitemBoardId) {
+        throw new Error("Could not find subitem board");
+      }
+      const value = JSON.stringify({ label: statusLabel });
+      await this.query(`
+                mutation {
+                    change_column_value(
+                        board_id: ${subitemBoardId},
+                        item_id: ${subitemId},
+                        column_id: "${columnId}",
+                        value: ${JSON.stringify(value)}
+                    ) {
+                        id
+                    }
+                }
+            `);
+      return true;
+    } catch (error) {
+      console.error("Failed to change subitem status:", error);
       throw error;
     }
   }
@@ -221,6 +264,85 @@ var MondayApiClient = class {
       return data.create_item || null;
     } catch (error) {
       console.error("Failed to create item:", error);
+      throw error;
+    }
+  }
+  async createSubitem(parentItemId, subitemName) {
+    try {
+      const data = await this.query(`
+                mutation {
+                    create_subitem(
+                        parent_item_id: ${parentItemId},
+                        item_name: ${JSON.stringify(subitemName)}
+                    ) {
+                        id
+                        name
+                    }
+                }
+            `);
+      return data.create_subitem || null;
+    } catch (error) {
+      console.error("Failed to create subitem:", error);
+      throw error;
+    }
+  }
+  async getUsers() {
+    try {
+      const data = await this.query(`
+                query {
+                    users(limit: 100) {
+                        id
+                        name
+                        email
+                    }
+                }
+            `);
+      return data.users || [];
+    } catch (error) {
+      console.error("Failed to get users:", error);
+      throw error;
+    }
+  }
+  async assignPerson(boardId, itemId, columnId, personIds) {
+    try {
+      const personsValue = JSON.stringify({
+        personsAndTeams: personIds.map((id) => ({ id, kind: "person" }))
+      });
+      await this.query(`
+                mutation {
+                    change_column_value(
+                        board_id: ${boardId},
+                        item_id: ${itemId},
+                        column_id: ${JSON.stringify(columnId)},
+                        value: ${JSON.stringify(personsValue)}
+                    ) {
+                        id
+                    }
+                }
+            `);
+      return true;
+    } catch (error) {
+      console.error("Failed to assign person:", error);
+      throw error;
+    }
+  }
+  async assignPersonToSubitem(parentItemId, subitemId, columnId, personIds) {
+    var _a, _b, _c;
+    try {
+      const boardData = await this.query(`
+                query {
+                    items(ids: [${subitemId}]) {
+                        board { id }
+                    }
+                }
+            `);
+      const subitemBoardId = (_c = (_b = (_a = boardData.items) == null ? void 0 : _a[0]) == null ? void 0 : _b.board) == null ? void 0 : _c.id;
+      if (!subitemBoardId) {
+        throw new Error("Could not find subitem board");
+      }
+      return await this.assignPerson(subitemBoardId, subitemId, columnId, personIds);
+    } catch (error) {
+      console.error("Failed to assign person to subitem:", error);
       throw error;
     }
   }
@@ -509,14 +631,18 @@ function parseDashboardOptions(source) {
   return options;
 }
 var MondayView = class extends import_obsidian.ItemView {
-  // columnId -> status labels
+  // Track expanded items for subitems
   constructor(leaf, plugin) {
     super(leaf);
     this.selectedBoardId = null;
     this.currentBoardData = null;
     this.statusFilter = { selected: /* @__PURE__ */ new Set(), mode: "include" };
     this.groupFilter = { selected: /* @__PURE__ */ new Set(), mode: "include" };
+    this.personFilter = null;
+    // Filter by team member name
     this.availableStatuses = /* @__PURE__ */ new Map();
+    // columnId -> status labels
+    this.expandedItems = /* @__PURE__ */ new Set();
     this.plugin = plugin;
   }
   getViewType() {
@@ -529,8 +655,8 @@ var MondayView = class extends import_obsidian.ItemView {
     return "calendar-check";
   }
   async onOpen() {
-    if (!this.selectedBoardId && this.plugin.settings.defaultBoardId) {
-      this.selectedBoardId = this.plugin.settings.defaultBoardId;
+    if (!this.selectedBoardId) {
+      this.selectedBoardId = this.plugin.currentBoardId || this.plugin.settings.defaultBoardId || null;
     }
     await this.render();
   }
@@ -569,11 +695,14 @@ var MondayView = class extends import_obsidian.ItemView {
       }
     }
     selectEl.addEventListener("change", (e) => {
-      this.selectedBoardId = e.target.value;
+      const boardId = e.target.value;
+      this.selectedBoardId = boardId;
       this.statusFilter = { selected: /* @__PURE__ */ new Set(), mode: "include" };
       this.groupFilter = { selected: /* @__PURE__ */ new Set(), mode: "include" };
+      this.personFilter = null;
       this.currentBoardData = null;
       void this.loadAndRenderBoard(container);
+      this.plugin.syncBoardSelection(boardId, "main");
     });
     container.createEl("div", { cls: "monday-sidebar-filters" });
     const itemsContainer = container.createEl("div", { cls: "monday-sidebar-items" });
@@ -790,7 +919,7 @@ var MondayView = class extends import_obsidian.ItemView {
     }
   }
   renderFilteredItems(container, boardData) {
-    var _a, _b;
+    var _a, _b, _c;
     container.empty();
     let filteredItems = boardData.items;
     if (this.statusFilter.selected.size > 0) {
@@ -816,6 +945,13 @@ var MondayView = class extends import_obsidian.ItemView {
         return this.groupFilter.mode === "include" ? isSelected : !isSelected;
       });
     }
+    if (this.personFilter) {
+      const peopleColumns = boardData.columns.filter((c) => c.type === "people" || c.type === "multiple-person");
+      filteredItems = filteredItems.filter((item) => {
+        const assignees = this.getItemAssignees(item, peopleColumns);
+        return assignees.includes(this.personFilter);
+      });
+    }
     if (filteredItems.length === 0) {
       container.createEl("p", { text: "No items match the filters.", cls: "monday-sidebar-hint" });
       return;
@@ -830,9 +966,40 @@ var MondayView = class extends import_obsidian.ItemView {
     }
     for (const [groupName, items] of groupedItems) {
       const groupEl = container.createEl("div", { cls: "monday-sidebar-group" });
-      groupEl.createEl("div", { text: groupName, cls: "monday-sidebar-group-title" });
+      const groupTitleEl = groupEl.createEl("div", { text: groupName, cls: "monday-sidebar-group-title" });
+      const groupColors = ["#00c875", "#fdab3d", "#a25ddc", "#579bfc", "#e2445c"];
+      const colorIndex = Array.from(groupedItems.keys()).indexOf(groupName) % groupColors.length;
+      const hexColor = groupColors[colorIndex];
+      groupTitleEl.style.borderLeftColor = hexColor;
+      groupTitleEl.style.color = hexColor;
       for (const item of items) {
-        const itemEl = groupEl.createEl("div", { cls: "monday-sidebar-item monday-sidebar-item-clickable" });
+        const itemWrapper = groupEl.createEl("div", { cls: "monday-sidebar-item-wrapper" });
+        const itemEl = itemWrapper.createEl("div", { cls: "monday-sidebar-item monday-sidebar-item-clickable" });
+        const hasSubitems = item.subitems && item.subitems.length > 0;
+        const isExpanded = this.expandedItems.has(item.id);
+        if (hasSubitems) {
+          const expandBtn = itemEl.createEl("span", {
+            cls: `monday-expand-btn ${isExpanded ? "expanded" : ""}`,
+            text: isExpanded ? "\u25BC" : "\u25B6"
+          });
+          expandBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (this.expandedItems.has(item.id)) {
+              this.expandedItems.delete(item.id);
+            } else {
+              this.expandedItems.add(item.id);
+            }
+            const itemsContainer = this.containerEl.querySelector(".monday-sidebar-items");
+            if (itemsContainer && this.currentBoardData) {
+              this.renderFilteredItems(itemsContainer, this.currentBoardData);
+            }
+          });
+        } else {
+          itemEl.createEl("span", {
+            cls: "monday-no-subtasks-icon",
+            text: "\u25CB"
+          });
+        }
         const nameEl = itemEl.createEl("span", { text: item.name, cls: "monday-sidebar-item-name" });
         nameEl.addEventListener("click", (e) => {
           e.stopPropagation();
@@ -879,6 +1046,78 @@ var MondayView = class extends import_obsidian.ItemView {
           e.stopPropagation();
           this.showItemContextMenu(e, item, boardData);
         });
+        if (hasSubitems && isExpanded && item.subitems) {
+          const subitemsContainer = itemWrapper.createEl("div", { cls: "monday-subitems-container" });
+          let filteredSubitemsCount = 0;
+          for (const subitem of item.subitems) {
+            if (this.statusFilter.selected.size > 0) {
+              let subitemStatus = "";
+              for (const cv of subitem.column_values) {
+                if (cv.value) {
+                  try {
+                    const valueObj = JSON.parse(cv.value);
+                    if (typeof (valueObj == null ? void 0 : valueObj.index) === "number") {
+                      subitemStatus = cv.text || "";
+                      break;
+                    }
+                  } catch (e) {
+                  }
+                }
+              }
+              const isSelected = this.statusFilter.selected.has(subitemStatus);
+              const shouldShow = this.statusFilter.mode === "include" ? isSelected : !isSelected;
+              if (!shouldShow)
+                continue;
+            }
+            filteredSubitemsCount++;
+            const subitemEl = subitemsContainer.createEl("div", { cls: "monday-subitem monday-subitem-clickable" });
+            subitemEl.createEl("span", { text: "\u2514\u2500", cls: "monday-subitem-prefix" });
+            const subitemNameEl = subitemEl.createEl("span", { text: subitem.name, cls: "monday-subitem-name" });
+            subitemNameEl.addEventListener("click", (e) => {
+              e.stopPropagation();
+              void this.handleSubitemClick(subitem, item, boardData);
+            });
+            subitemEl.addEventListener("contextmenu", (e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              this.showSubitemContextMenu(e, subitem, item, boardData);
+            });
+            for (const cv of subitem.column_values) {
+              if (cv.value && cv.text) {
+                try {
+                  const valueObj = JSON.parse(cv.value);
+                  if (typeof (valueObj == null ? void 0 : valueObj.index) === "number") {
+                    const statusBadge = subitemEl.createEl("span", {
+                      text: cv.text,
+                      cls: "monday-subitem-status"
+                    });
+                    if ((_c = valueObj.label_style) == null ? void 0 : _c.color) {
+                      statusBadge.style.backgroundColor = valueObj.label_style.color;
+                    }
+                    break;
+                  }
+                } catch (e) {
+                }
+              }
+            }
+          }
+          if (filteredSubitemsCount === 0) {
+            const hintEl = subitemsContainer.createEl("div", { cls: "monday-subitem monday-subitems-filtered-hint" });
+            hintEl.createEl("span", { text: "\u2514\u2500", cls: "monday-subitem-prefix" });
+            hintEl.createEl("span", { text: `(${item.subitems.length} subtasks hidden by filter)`, cls: "monday-subitem-hint-text" });
+          }
+          const addSubtaskBtn = subitemsContainer.createEl("div", { cls: "monday-add-subtask" });
+          addSubtaskBtn.createEl("span", { text: "\u2514\u2500", cls: "monday-subitem-prefix" });
+          addSubtaskBtn.createEl("span", { text: "+ Add subtask", cls: "monday-add-subtask-text" });
+          addSubtaskBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            new CreateSubtaskModal(this.app, item.name, async (subtaskName) => {
+              if (subtaskName) {
+                await this.createSubtask(item, subtaskName);
+              }
+            }).open();
+          });
+        }
       }
     }
     container.createEl("div", {
@@ -991,6 +1230,126 @@ var MondayView = class extends import_obsidian.ItemView {
       content += `- **Assigned:** ${personCol.text}
 `;
     }
+    if (item.subitems && item.subitems.length > 0) {
+      content += `
+## Subtasks
+
+`;
+      for (const subitem of item.subitems) {
+        const subitemStatus = subitem.column_values.find((cv) => {
+          const col = boardData.columns.find((c) => c.id === cv.id);
+          return (col == null ? void 0 : col.type) === "status";
+        });
+        const statusText = (subitemStatus == null ? void 0 : subitemStatus.text) ? ` - ${subitemStatus.text}` : "";
+        const subitemNoteName = this.generateSubitemNoteName(subitem, item, boardData);
+        content += `- [ ] [[${subitemNoteName}]]${statusText}
+`;
+      }
+    }
+    content += `
+## Notes
+
+`;
+    const file = await app.vault.create(notePath, content);
+    await app.workspace.openLinkText(notePath, "", false);
+    new import_obsidian.Notice(`Created note: ${file.basename}`);
+  }
+  async handleSubitemClick(subitem, parentItem, boardData) {
+    const plugin = this.plugin;
+    const app = this.app;
+    const noteName = this.generateSubitemNoteName(subitem, parentItem, boardData);
+    const noteFolder = plugin.settings.noteFolder || "Monday";
+    const notePath = (0, import_obsidian.normalizePath)(`${noteFolder}/${noteName}.md`);
+    const existingFile = app.vault.getAbstractFileByPath(notePath);
+    if (existingFile && existingFile instanceof import_obsidian.TFile) {
+      await app.workspace.openLinkText(notePath, "", false);
+    } else {
+      await this.createNoteForSubitem(subitem, parentItem, boardData, notePath);
+    }
+  }
+  generateSubitemNoteName(subitem, parentItem, boardData) {
+    var _a;
+    const template = this.plugin.settings.noteNameTemplate || "{name}";
+    const boardName = boardData.name || "Unknown Board";
+    const groupName = ((_a = parentItem.group) == null ? void 0 : _a.title) || "No Group";
+    const sanitise = (str) => str.replace(/[\\/:*?"<>|]/g, "-");
+    return template.replace("{name}", sanitise(subitem.name)).replace("{board}", sanitise(boardName)).replace("{group}", sanitise(groupName)).replace("{id}", subitem.id);
+  }
+  async createNoteForSubitem(subitem, parentItem, boardData, notePath) {
+    const app = this.app;
+    const plugin = this.plugin;
+    const folderPath = notePath.substring(0, notePath.lastIndexOf("/"));
+    if (folderPath && !app.vault.getAbstractFileByPath(folderPath)) {
+      await app.vault.createFolder(folderPath);
+    }
+    const statusCol = subitem.column_values.find((cv) => {
+      const col = boardData.columns.find((c) => c.id === cv.id);
+      return (col == null ? void 0 : col.type) === "status";
+    });
+    const frontmatter = {
+      title: subitem.name,
+      monday_id: subitem.id,
+      monday_parent_id: parentItem.id,
+      monday_parent: parentItem.name,
+      monday_board: boardData.name,
+      monday_board_id: this.selectedBoardId || "",
+      status: (statusCol == null ? void 0 : statusCol.text) || "",
+      type: "subtask",
+      created: new Date().toISOString().split("T")[0],
+      tags: ["monday", "subtask"]
+    };
+    let content = "---\n";
+    for (const [key, value] of Object.entries(frontmatter)) {
+      if (Array.isArray(value)) {
+        content += `${key}:
+`;
+        for (const v of value) {
+          content += `  - ${v}
+`;
+        }
+      } else if (value) {
+        content += `${key}: "${value}"
+`;
+      }
+    }
+    content += "---\n\n";
+    content += `# ${subitem.name}
+
+`;
+    const parentNoteName = this.generateNoteName(parentItem, boardData);
+    content += `## Parent Task
+
+`;
+    content += `[[${parentNoteName}]]
+
+`;
+    content += `## Details
+
+`;
+    content += `- **Board:** ${boardData.name}
+`;
+    content += `- **Parent:** ${parentItem.name}
+`;
+    content += `- **Status:** ${(statusCol == null ? void 0 : statusCol.text) || "None"}
+`;
+    if (parentItem.subitems && parentItem.subitems.length > 1) {
+      content += `
+## Related Subtasks
+
+`;
+      for (const sibling of parentItem.subitems) {
+        if (sibling.id !== subitem.id) {
+          const siblingStatus = sibling.column_values.find((cv) => {
+            const col = boardData.columns.find((c) => c.id === cv.id);
+            return (col == null ? void 0 : col.type) === "status";
+          });
+          const statusText = (siblingStatus == null ? void 0 : siblingStatus.text) ? ` - ${siblingStatus.text}` : "";
+          const siblingNoteName = this.generateSubitemNoteName(sibling, parentItem, boardData);
+          content += `- [[${siblingNoteName}]]${statusText}
+`;
+        }
+      }
+    }
     content += `
 ## Notes
 
@@ -1035,6 +1394,106 @@ var MondayView = class extends import_obsidian.ItemView {
         }).open();
       });
     });
+    const peopleColumn = boardData.columns.find((c) => c.type === "people" || c.type === "multiple-person");
+    if (peopleColumn) {
+      const currentAssignees = this.getItemAssignees(item, [peopleColumn]);
+      menu.addItem((menuItem) => {
+        menuItem.setTitle(currentAssignees.length > 0 ? "Reassign" : "Assign person").setIcon("user-plus").onClick(() => {
+          new AssignPersonModal(
+            this.app,
+            this.plugin,
+            item.name,
+            currentAssignees,
+            async (userIds) => {
+              if (userIds !== null && this.selectedBoardId) {
+                await this.assignPersonToItem(item, boardData, peopleColumn.id, userIds);
+              }
+            }
+          ).open();
+        });
+      });
+    }
+    menu.addItem((menuItem) => {
+      menuItem.setTitle("Add subtask").setIcon("list-plus").onClick(() => {
+        new CreateSubtaskModal(this.app, item.name, async (subtaskName) => {
+          if (subtaskName) {
+            await this.createSubtask(item, subtaskName);
+          }
+        }).open();
+      });
+    });
+    menu.showAtMouseEvent(event);
+  }
+  showSubitemContextMenu(event, subitem, parentItem, boardData) {
+    const menu = new import_obsidian.Menu();
+    menu.addItem((menuItem) => {
+      menuItem.setTitle("Create note").setIcon("file-plus").onClick(() => {
+        void this.handleSubitemClick(subitem, parentItem, boardData);
+      });
+    });
+    menu.addSeparator();
+    let statusColumnId = "";
+    let currentStatus = "";
+    for (const cv of subitem.column_values) {
+      if (cv.value) {
+        try {
+          const parsed = JSON.parse(cv.value);
+          if (typeof parsed.index === "number") {
+            statusColumnId = cv.id;
+            currentStatus = cv.text || "";
+            break;
+          }
+        } catch (e) {
+        }
+      }
+    }
+    if (statusColumnId) {
+      const statusColumn = boardData.columns.find((c) => c.type === "status");
+      const statusOptions = statusColumn ? this.availableStatuses.get(statusColumn.id) || [] : [];
+      if (statusOptions.length > 0) {
+        menu.addItem((menuItem) => {
+          menuItem.setTitle("Change status").setIcon("check-circle");
+          const submenu = menuItem.setSubmenu();
+          for (const status of statusOptions) {
+            submenu.addItem((subItem) => {
+              subItem.setTitle(status).setChecked(status === currentStatus).onClick(() => {
+                if (status !== currentStatus) {
+                  void this.changeSubitemStatus(subitem, parentItem, statusColumnId, status);
+                }
+              });
+            });
+          }
+        });
+      }
+    }
+    const currentAssignees = [];
+    for (const cv of subitem.column_values) {
+      if (cv.value && cv.text) {
+        try {
+          const parsed = JSON.parse(cv.value);
+          if (parsed.personsAndTeams !== void 0 && cv.text) {
+            const names = cv.text.split(",").map((n) => n.trim()).filter((n) => n);
+            currentAssignees.push(...names);
+          }
+        } catch (e) {
+        }
+      }
+    }
+    menu.addItem((menuItem) => {
+      menuItem.setTitle(currentAssignees.length > 0 ? "Reassign" : "Assign person").setIcon("user-plus").onClick(() => {
+        new AssignPersonModal(
+          this.app,
+          this.plugin,
+          subitem.name,
+          currentAssignees,
+          async (userIds) => {
+            if (userIds !== null) {
+              await this.assignPersonToSubitem(subitem, parentItem, boardData, userIds);
+            }
+          }
+        ).open();
+      });
+    });
     menu.showAtMouseEvent(event);
   }
   async changeItemStatus(item, columnId, newStatus) {
@@ -1056,6 +1515,17 @@ var MondayView = class extends import_obsidian.ItemView {
       new import_obsidian.Notice(`Failed to change status: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   }
+  async changeSubitemStatus(subitem, parentItem, columnId, newStatus) {
+    try {
+      new import_obsidian.Notice(`Changing status to "${newStatus}"...`);
+      await this.plugin.apiClient.changeSubitemStatus(subitem.id, columnId, newStatus);
+      new import_obsidian.Notice(`Status updated to "${newStatus}"`);
+      this.currentBoardData = null;
+      await this.loadAndRenderBoard(this.containerEl.children[1]);
+    } catch (error) {
+      new import_obsidian.Notice(`Failed to change status: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  }
   async addItemComment(item, comment) {
     try {
       new import_obsidian.Notice("Adding comment...");
@@ -1063,6 +1533,67 @@ var MondayView = class extends import_obsidian.ItemView {
       new import_obsidian.Notice("Comment added successfully");
     } catch (error) {
       new import_obsidian.Notice(`Failed to add comment: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  }
+  async createSubtask(item, subtaskName) {
+    try {
+      new import_obsidian.Notice("Creating subtask...");
+      const result = await this.plugin.apiClient.createSubitem(item.id, subtaskName);
+      if (result) {
+        new import_obsidian.Notice(`Subtask created: ${result.name}`);
+        this.expandedItems.add(item.id);
+        await this.loadAndRenderBoard(this.containerEl.children[1]);
+      } else {
+        new import_obsidian.Notice("Failed to create subtask");
+      }
+    } catch (error) {
+      new import_obsidian.Notice(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  }
+  async assignPersonToItem(item, boardData, columnId, userIds) {
+    if (!this.selectedBoardId)
+      return;
+    try {
+      new import_obsidian.Notice("Updating assignment...");
+      await this.plugin.apiClient.assignPerson(this.selectedBoardId, item.id, columnId, userIds);
+      new import_obsidian.Notice(userIds.length > 0 ? "Person assigned" : "Assignment cleared");
+      this.currentBoardData = null;
+      await this.loadAndRenderBoard(this.containerEl.children[1]);
+    } catch (error) {
+      new import_obsidian.Notice(`Failed to assign: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  }
+  async assignPersonToSubitem(subitem, parentItem, boardData, userIds) {
+    try {
+      let peopleColumnId = "";
+      for (const cv of subitem.column_values) {
+        if (cv.value) {
+          try {
+            const parsed = JSON.parse(cv.value);
+            if (parsed.personsAndTeams !== void 0) {
+              peopleColumnId = cv.id;
+              break;
+            }
+          } catch (e) {
+          }
+        }
+      }
+      if (!peopleColumnId) {
+        const peopleCol = boardData.columns.find((c) => c.type === "people" || c.type === "multiple-person");
+        if (peopleCol)
+          peopleColumnId = peopleCol.id;
+      }
+      if (!peopleColumnId) {
+        new import_obsidian.Notice("Could not find people column");
+        return;
+      }
+      new import_obsidian.Notice("Updating assignment...");
+      await this.plugin.apiClient.assignPersonToSubitem(parentItem.id, subitem.id, peopleColumnId, userIds);
+      new import_obsidian.Notice(userIds.length > 0 ? "Person assigned" : "Assignment cleared");
+      this.currentBoardData = null;
+      await this.loadAndRenderBoard(this.containerEl.children[1]);
+    } catch (error) {
+      new import_obsidian.Notice(`Failed to assign: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   }
   async refreshBoards() {
@@ -1076,6 +1607,342 @@ var MondayView = class extends import_obsidian.ItemView {
       await this.render();
     } catch (error) {
       new import_obsidian.Notice(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  }
+  getItemAssignees(item, peopleColumns) {
+    const assignees = [];
+    for (const col of peopleColumns) {
+      const colValue = item.column_values.find((cv) => cv.id === col.id);
+      if (colValue == null ? void 0 : colValue.value) {
+        try {
+          const parsed = JSON.parse(colValue.value);
+          if (parsed.personsAndTeams && Array.isArray(parsed.personsAndTeams)) {
+            if (colValue.text) {
+              const names = colValue.text.split(",").map((n) => n.trim()).filter((n) => n);
+              assignees.push(...names);
+            }
+          }
+        } catch (e) {
+          if (colValue.text) {
+            const names = colValue.text.split(",").map((n) => n.trim()).filter((n) => n);
+            assignees.push(...names);
+          }
+        }
+      }
+    }
+    return [...new Set(assignees)];
+  }
+  // Public method to set board from other views (for sync)
+  setBoard(boardId) {
+    if (this.selectedBoardId === boardId)
+      return;
+    this.selectedBoardId = boardId;
+    this.statusFilter = { selected: /* @__PURE__ */ new Set(), mode: "include" };
+    this.groupFilter = { selected: /* @__PURE__ */ new Set(), mode: "include" };
+    this.personFilter = null;
+    this.currentBoardData = null;
+    void this.render();
+  }
+  // Public method to set person filter from Team View
+  setPersonFilter(personName) {
+    this.personFilter = personName;
+    if (this.currentBoardData) {
+      const container = this.containerEl.children[1];
+      const itemsContainer = container.querySelector(".monday-sidebar-items");
+      if (itemsContainer) {
+        this.renderFilteredItems(itemsContainer, this.currentBoardData);
+      }
+      this.updatePersonFilterIndicator(container);
+    }
+  }
+  updatePersonFilterIndicator(container) {
+    const existing = container.querySelector(".monday-person-filter-indicator");
+    if (existing)
+      existing.remove();
+    if (this.personFilter) {
+      const filtersContainer = container.querySelector(".monday-sidebar-filters");
+      if (filtersContainer) {
+        const indicator = filtersContainer.createEl("div", { cls: "monday-person-filter-indicator" });
+        indicator.createEl("span", { text: `Filtered: ${this.personFilter}`, cls: "monday-person-filter-text" });
+        const clearBtn = indicator.createEl("span", { text: "\u2715", cls: "monday-person-filter-clear" });
+        clearBtn.addEventListener("click", () => {
+          this.setPersonFilter(null);
+        });
+      }
+    }
+  }
+  async onClose() {
+  }
+};
+var MondayTeamView = class extends import_obsidian.ItemView {
+  constructor(leaf, plugin) {
+    super(leaf);
+    this.selectedBoardId = "";
+    this.plugin = plugin;
+  }
+  getViewType() {
+    return MONDAY_TEAM_VIEW_TYPE;
+  }
+  getDisplayText() {
+    return "Monday Team";
+  }
+  getIcon() {
+    return "users";
+  }
+  async onOpen() {
+    if (!this.selectedBoardId) {
+      this.selectedBoardId = this.plugin.currentBoardId || this.plugin.settings.defaultBoardId || "";
+    }
+    await this.render();
+  }
+  async render() {
+    const container = this.containerEl.children[1];
+    container.empty();
+    container.addClass("monday-team-sidebar");
+    if (!this.plugin.settings.apiToken) {
+      const errorEl = container.createEl("div", { cls: "monday-sidebar-error" });
+      errorEl.createEl("p", { text: "API token not configured." });
+      const settingsBtn = errorEl.createEl("button", { text: "Open settings" });
+      settingsBtn.addEventListener("click", () => {
+        this.app.setting.open();
+        this.app.setting.openTabById("monday-integration");
+      });
+      return;
+    }
+    const headerEl = container.createEl("div", { cls: "monday-sidebar-header" });
+    headerEl.createEl("h4", { text: "Team Summary" });
+    const refreshBtn = headerEl.createEl("button", { cls: "monday-sidebar-refresh" });
+    refreshBtn.setText("\u21BB");
+    refreshBtn.title = "Refresh";
+    refreshBtn.addEventListener("click", () => void this.render());
+    const selectorEl = container.createEl("div", { cls: "monday-board-selector" });
+    const selectEl = selectorEl.createEl("select", { cls: "monday-board-select" });
+    const defaultOption = selectEl.createEl("option", { text: "Select a board...", value: "" });
+    defaultOption.disabled = true;
+    defaultOption.selected = !this.selectedBoardId;
+    for (const board of this.plugin.settings.cachedBoards) {
+      const option = selectEl.createEl("option", {
+        text: board.name,
+        value: board.id
+      });
+      if (board.id === this.selectedBoardId) {
+        option.selected = true;
+      }
+    }
+    selectEl.addEventListener("change", (e) => {
+      const boardId = e.target.value;
+      this.selectedBoardId = boardId;
+      void this.loadAndRenderTeamStats(container);
+      this.plugin.syncBoardSelection(boardId, "team");
+    });
+    container.createEl("div", { cls: "monday-team-stats" });
+    if (this.selectedBoardId) {
+      await this.loadAndRenderTeamStats(container);
+    } else if (this.plugin.settings.cachedBoards.length === 0) {
+      const statsContainer = container.querySelector(".monday-team-stats");
+      statsContainer.createEl("p", { text: "Click refresh in main view to load boards.", cls: "monday-sidebar-hint" });
+    }
+  }
+  async loadAndRenderTeamStats(container) {
+    const statsContainer = container.querySelector(".monday-team-stats");
+    if (!statsContainer)
+      return;
+    statsContainer.empty();
+    const loadingEl = statsContainer.createEl("div", { cls: "monday-loading" });
+    loadingEl.createEl("div", { cls: "monday-spinner" });
+    loadingEl.createEl("span", { text: "Loading team data...", cls: "monday-loading-text" });
+    try {
+      const boardData = await this.plugin.apiClient.getBoardData(this.selectedBoardId, 500);
+      statsContainer.empty();
+      if (!boardData || boardData.items.length === 0) {
+        statsContainer.createEl("p", { text: "No items found.", cls: "monday-sidebar-hint" });
+        return;
+      }
+      const teamStats = this.aggregateTeamStats(boardData);
+      if (teamStats.length === 0) {
+        statsContainer.createEl("p", { text: "No assigned tasks found.", cls: "monday-sidebar-hint" });
+        return;
+      }
+      this.renderTeamStats(statsContainer, teamStats);
+    } catch (error) {
+      statsContainer.empty();
+      statsContainer.createEl("p", {
+        text: `Error: ${error instanceof Error ? error.message : "Unknown error"}`,
+        cls: "monday-sidebar-error"
+      });
+    }
+  }
+  aggregateTeamStats(boardData) {
+    const statsMap = /* @__PURE__ */ new Map();
+    const peopleColumns = boardData.columns.filter((c) => c.type === "people" || c.type === "multiple-person");
+    const statusColumns = boardData.columns.filter((c) => c.type === "status");
+    const dateColumns = boardData.columns.filter((c) => c.type === "date" || c.type === "timeline");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    for (const item of boardData.items) {
+      const assignees = this.getAssignees(item, peopleColumns);
+      if (assignees.length === 0)
+        continue;
+      const status = this.getItemStatus(item, statusColumns);
+      const isDone = status.toLowerCase().includes("done");
+      const isWorkingOnIt = status.toLowerCase().includes("working") || status.toLowerCase().includes("in progress") || status.toLowerCase().includes("active");
+      const isOverdue = !isDone && this.isItemOverdue(item, dateColumns, today);
+      for (const assignee of assignees) {
+        if (!statsMap.has(assignee)) {
+          statsMap.set(assignee, {
+            name: assignee,
+            workingOnIt: 0,
+            done: 0,
+            overdue: 0
+          });
+        }
+        const stats = statsMap.get(assignee);
+        if (isDone) {
+          stats.done++;
+        } else if (isWorkingOnIt) {
+          stats.workingOnIt++;
+        }
+        if (isOverdue) {
+          stats.overdue++;
+        }
+      }
+    }
+    return Array.from(statsMap.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }
+  getAssignees(item, peopleColumns) {
+    const assignees = [];
+    for (const col of peopleColumns) {
+      const colValue = item.column_values.find((cv) => cv.id === col.id);
+      if (colValue == null ? void 0 : colValue.value) {
+        try {
+          const parsed = JSON.parse(colValue.value);
+          if (parsed.personsAndTeams && Array.isArray(parsed.personsAndTeams)) {
+            if (colValue.text) {
+              const names = colValue.text.split(",").map((n) => n.trim()).filter((n) => n);
+              assignees.push(...names);
+            }
+          }
+        } catch (e) {
+          if (colValue.text) {
+            const names = colValue.text.split(",").map((n) => n.trim()).filter((n) => n);
+            assignees.push(...names);
+          }
+        }
+      }
+    }
+    return [...new Set(assignees)];
+  }
+  getItemStatus(item, statusColumns) {
+    for (const col of statusColumns) {
+      const colValue = item.column_values.find((cv) => cv.id === col.id);
+      if (colValue == null ? void 0 : colValue.text) {
+        return colValue.text;
+      }
+    }
+    return "";
+  }
+  isItemOverdue(item, dateColumns, today) {
+    for (const col of dateColumns) {
+      const colValue = item.column_values.find((cv) => cv.id === col.id);
+      if (colValue == null ? void 0 : colValue.value) {
+        try {
+          const parsed = JSON.parse(colValue.value);
+          const dateStr = parsed.date || parsed.to;
+          if (dateStr) {
+            const dueDate = new Date(dateStr);
+            dueDate.setHours(0, 0, 0, 0);
+            if (dueDate < today) {
+              return true;
+            }
+          }
+        } catch (e) {
+        }
+      }
+    }
+    return false;
+  }
+  renderTeamStats(container, stats) {
+    for (const member of stats) {
+      const memberEl = container.createEl("div", { cls: "monday-team-member monday-team-member-clickable" });
+      memberEl.title = `Click to filter by ${member.name}`;
+      memberEl.addEventListener("click", () => {
+        this.filterMainViewByPerson(member.name);
+      });
+      memberEl.createEl("span", { text: member.name, cls: "monday-team-member-name" });
+      const badgesEl = memberEl.createEl("div", { cls: "monday-team-badges" });
+      if (member.workingOnIt > 0) {
+        const workingBadge = badgesEl.createEl("span", {
+          text: String(member.workingOnIt),
+          cls: "monday-team-badge monday-team-badge-working"
+        });
+        workingBadge.title = "Working on it";
+      }
+      if (member.done > 0) {
+        const doneBadge = badgesEl.createEl("span", {
+          text: String(member.done),
+          cls: "monday-team-badge monday-team-badge-done"
+        });
+        doneBadge.title = "Done";
+      }
+      if (member.overdue > 0) {
+        const overdueBadge = badgesEl.createEl("span", {
+          text: String(member.overdue),
+          cls: "monday-team-badge monday-team-badge-overdue"
+        });
+        overdueBadge.title = "Overdue";
+      }
+      if (member.workingOnIt === 0 && member.done === 0 && member.overdue === 0) {
+        badgesEl.createEl("span", { text: "-", cls: "monday-team-no-tasks" });
+      }
+    }
+    const totalWorking = stats.reduce((sum, s) => sum + s.workingOnIt, 0);
+    const totalDone = stats.reduce((sum, s) => sum + s.done, 0);
+    const totalOverdue = stats.reduce((sum, s) => sum + s.overdue, 0);
+    const summaryEl = container.createEl("div", { cls: "monday-team-summary" });
+    summaryEl.createEl("span", { text: "Total:", cls: "monday-team-summary-label" });
+    const summaryBadges = summaryEl.createEl("div", { cls: "monday-team-badges" });
+    const workingSummary = summaryBadges.createEl("span", {
+      text: String(totalWorking),
+      cls: "monday-team-badge monday-team-badge-working"
+    });
+    workingSummary.title = "Total working";
+    const doneSummary = summaryBadges.createEl("span", {
+      text: String(totalDone),
+      cls: "monday-team-badge monday-team-badge-done"
+    });
+    doneSummary.title = "Total done";
+    const overdueSummary = summaryBadges.createEl("span", {
+      text: String(totalOverdue),
+      cls: "monday-team-badge monday-team-badge-overdue"
+    });
+    overdueSummary.title = "Total overdue";
+  }
+  // Public method to set board from other views (for sync)
+  setBoard(boardId) {
+    if (this.selectedBoardId === boardId)
+      return;
+    this.selectedBoardId = boardId;
+    void this.render();
+  }
+  filterMainViewByPerson(personName) {
+    const { workspace } = this.app;
+    const mondayLeaves = workspace.getLeavesOfType(MONDAY_VIEW_TYPE);
+    if (mondayLeaves.length > 0) {
+      const mondayView = mondayLeaves[0].view;
+      mondayView.setPersonFilter(personName);
+      workspace.revealLeaf(mondayLeaves[0]);
+      new import_obsidian.Notice(`Filtered by: ${personName}`);
+    } else {
+      void this.plugin.activateView().then(() => {
+        const leaves = workspace.getLeavesOfType(MONDAY_VIEW_TYPE);
+        if (leaves.length > 0) {
+          const mondayView = leaves[0].view;
+          setTimeout(() => {
+            mondayView.setPersonFilter(personName);
+            new import_obsidian.Notice(`Filtered by: ${personName}`);
+          }, 500);
+        }
+      });
     }
   }
   async onClose() {
@@ -1150,6 +2017,140 @@ var AddCommentModal = class extends import_obsidian.Modal {
       this.close();
     });
     setTimeout(() => textArea.focus(), 50);
+  }
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
+  }
+};
+var CreateSubtaskModal = class extends import_obsidian.Modal {
+  constructor(app, parentItemName, callback) {
+    super(app);
+    this.parentItemName = parentItemName;
+    this.callback = callback;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("monday-subtask-modal");
+    contentEl.createEl("h3", { text: "Add subtask" });
+    contentEl.createEl("p", { text: `Adding subtask to: ${this.parentItemName}`, cls: "monday-subtask-parent-name" });
+    const inputEl = contentEl.createEl("input", {
+      cls: "monday-subtask-input",
+      attr: {
+        type: "text",
+        placeholder: "Enter subtask name..."
+      }
+    });
+    const buttonContainer = contentEl.createEl("div", { cls: "monday-modal-buttons" });
+    const submitBtn = buttonContainer.createEl("button", { text: "Create subtask", cls: "mod-cta" });
+    submitBtn.addEventListener("click", () => {
+      const subtaskName = inputEl.value.trim();
+      if (subtaskName) {
+        this.callback(subtaskName);
+        this.close();
+      } else {
+        new import_obsidian.Notice("Please enter a subtask name");
+      }
+    });
+    const cancelBtn = buttonContainer.createEl("button", { text: "Cancel" });
+    cancelBtn.addEventListener("click", () => {
+      this.callback(null);
+      this.close();
+    });
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const subtaskName = inputEl.value.trim();
+        if (subtaskName) {
+          this.callback(subtaskName);
+          this.close();
+        }
+      }
+    });
+    setTimeout(() => inputEl.focus(), 50);
+  }
+  onClose() {
+    const { contentEl } = this;
+    contentEl.empty();
+  }
+};
+var AssignPersonModal = class extends import_obsidian.Modal {
+  constructor(app, plugin, itemName, currentAssignees, callback) {
+    super(app);
+    this.users = [];
+    this.selectedUserIds = /* @__PURE__ */ new Set();
+    this.plugin = plugin;
+    this.itemName = itemName;
+    this.currentAssignees = currentAssignees;
+    this.callback = callback;
+  }
+  async onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("monday-assign-modal");
+    contentEl.createEl("h3", { text: "Assign person" });
+    contentEl.createEl("p", { text: this.itemName, cls: "monday-assign-item-name" });
+    if (this.currentAssignees.length > 0) {
+      contentEl.createEl("p", {
+        text: `Currently assigned: ${this.currentAssignees.join(", ")}`,
+        cls: "monday-assign-current"
+      });
+    }
+    const loadingEl = contentEl.createEl("div", { cls: "monday-loading" });
+    loadingEl.createEl("div", { cls: "monday-spinner" });
+    loadingEl.createEl("span", { text: "Loading users...", cls: "monday-loading-text" });
+    try {
+      this.users = await this.plugin.apiClient.getUsers();
+      loadingEl.remove();
+      const userListEl = contentEl.createEl("div", { cls: "monday-user-list" });
+      for (const user of this.users) {
+        const userEl = userListEl.createEl("div", { cls: "monday-user-item" });
+        const checkbox = userEl.createEl("input", {
+          attr: { type: "checkbox", id: `user-${user.id}` }
+        });
+        if (this.currentAssignees.some((a) => a.toLowerCase() === user.name.toLowerCase())) {
+          checkbox.checked = true;
+          this.selectedUserIds.add(parseInt(user.id));
+        }
+        checkbox.addEventListener("change", () => {
+          const userId = parseInt(user.id);
+          if (checkbox.checked) {
+            this.selectedUserIds.add(userId);
+          } else {
+            this.selectedUserIds.delete(userId);
+          }
+        });
+        const label = userEl.createEl("label", {
+          text: user.name,
+          attr: { for: `user-${user.id}` }
+        });
+        label.createEl("span", { text: ` (${user.email})`, cls: "monday-user-email" });
+      }
+      const buttonContainer = contentEl.createEl("div", { cls: "monday-modal-buttons" });
+      const clearBtn = buttonContainer.createEl("button", { text: "Clear all" });
+      clearBtn.addEventListener("click", () => {
+        this.selectedUserIds.clear();
+        userListEl.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+          cb.checked = false;
+        });
+      });
+      const submitBtn = buttonContainer.createEl("button", { text: "Assign", cls: "mod-cta" });
+      submitBtn.addEventListener("click", () => {
+        this.callback(Array.from(this.selectedUserIds));
+        this.close();
+      });
+      const cancelBtn = buttonContainer.createEl("button", { text: "Cancel" });
+      cancelBtn.addEventListener("click", () => {
+        this.callback(null);
+        this.close();
+      });
+    } catch (error) {
+      loadingEl.remove();
+      contentEl.createEl("p", {
+        text: `Error loading users: ${error instanceof Error ? error.message : "Unknown error"}`,
+        cls: "monday-sidebar-error"
+      });
+    }
   }
   onClose() {
     const { contentEl } = this;
@@ -1485,6 +2486,11 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
   }
 };
 var MondayIntegrationPlugin = class extends import_obsidian.Plugin {
+  constructor() {
+    super(...arguments);
+    this.currentBoardId = "";
+  }
+  // Shared board selection between views
   async onload() {
     console.debug("Loading Monday.com Integration plugin");
     await this.loadSettings();
@@ -1497,6 +2503,10 @@ var MondayIntegrationPlugin = class extends import_obsidian.Plugin {
       MONDAY_VIEW_TYPE,
       (leaf) => new MondayView(leaf, this)
     );
+    this.registerView(
+      MONDAY_TEAM_VIEW_TYPE,
+      (leaf) => new MondayTeamView(leaf, this)
+    );
     this.registerMarkdownCodeBlockProcessor(
       "monday",
       (source, el, ctx) => {
@@ -1507,6 +2517,9 @@ var MondayIntegrationPlugin = class extends import_obsidian.Plugin {
     );
     this.addRibbonIcon("calendar-check", "Open Monday.com", () => {
       void this.activateView();
+    });
+    this.addRibbonIcon("users", "Open Monday Team Summary", () => {
+      void this.activateTeamView();
     });
     this.addCommand({
       id: "insert-monday-board",
@@ -1526,6 +2539,13 @@ title: My Tasks
       name: "Open sidebar",
       callback: () => {
         void this.activateView();
+      }
+    });
+    this.addCommand({
+      id: "open-monday-team-summary",
+      name: "Open team summary",
+      callback: () => {
+        void this.activateTeamView();
       }
     });
     this.addCommand({
@@ -1595,6 +2615,42 @@ title: My Tasks
     }
     if (leaf) {
       workspace.revealLeaf(leaf);
+    }
+  }
+  async activateTeamView() {
+    const { workspace } = this.app;
+    let leaf = workspace.getLeavesOfType(MONDAY_TEAM_VIEW_TYPE)[0];
+    if (!leaf) {
+      const rightLeaf = workspace.getRightLeaf(false);
+      if (rightLeaf) {
+        await rightLeaf.setViewState({
+          type: MONDAY_TEAM_VIEW_TYPE,
+          active: true
+        });
+        leaf = rightLeaf;
+      }
+    }
+    if (leaf) {
+      workspace.revealLeaf(leaf);
+    }
+  }
+  // Sync board selection across all Monday views
+  syncBoardSelection(boardId, sourceView) {
+    this.currentBoardId = boardId;
+    const { workspace } = this.app;
+    if (sourceView === "team") {
+      const mondayLeaves = workspace.getLeavesOfType(MONDAY_VIEW_TYPE);
+      for (const leaf of mondayLeaves) {
+        const view = leaf.view;
+        view.setBoard(boardId);
+      }
+    }
+    if (sourceView === "main") {
+      const teamLeaves = workspace.getLeavesOfType(MONDAY_TEAM_VIEW_TYPE);
+      for (const leaf of teamLeaves) {
+        const view = leaf.view;
+        view.setBoard(boardId);
+      }
     }
   }
   onunload() {
