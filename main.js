@@ -599,14 +599,15 @@ function parseDashboardOptions(source) {
       case "columns":
         options.columns = value.split(",").map((c) => c.trim().toLowerCase()).filter((c) => c);
         break;
-      case "style":
+      case "style": {
         const styleValue = value.toLowerCase();
         if (styleValue === "table" || styleValue === "compact" || styleValue === "cards") {
           options.style = styleValue;
         }
         break;
+      }
       case "status":
-      case "filter":
+      case "filter": {
         const statuses = value.split(",").map((s) => s.trim()).filter((s) => s);
         for (const status of statuses) {
           if (status.startsWith("!")) {
@@ -616,7 +617,8 @@ function parseDashboardOptions(source) {
           }
         }
         break;
-      case "group":
+      }
+      case "group": {
         const groups = value.split(",").map((g) => g.trim()).filter((g) => g);
         for (const group of groups) {
           if (group.startsWith("!")) {
@@ -626,6 +628,7 @@ function parseDashboardOptions(source) {
           }
         }
         break;
+      }
     }
   }
   return options;
@@ -1019,11 +1022,11 @@ var MondayView = class extends import_obsidian.ItemView {
               opt.selected = true;
             }
           }
-          statusDropdown.addEventListener("change", async (e) => {
+          statusDropdown.addEventListener("change", (e) => {
             e.stopPropagation();
             const newStatus = e.target.value;
             if (newStatus !== currentStatus && this.selectedBoardId) {
-              await this.changeItemStatus(item, statusColumn.id, newStatus);
+              void this.changeItemStatus(item, statusColumn.id, newStatus);
             }
           });
           statusDropdown.addEventListener("click", (e) => e.stopPropagation());
@@ -1111,9 +1114,9 @@ var MondayView = class extends import_obsidian.ItemView {
           addSubtaskBtn.createEl("span", { text: "+ Add subtask", cls: "monday-add-subtask-text" });
           addSubtaskBtn.addEventListener("click", (e) => {
             e.stopPropagation();
-            new CreateSubtaskModal(this.app, item.name, async (subtaskName) => {
+            new CreateSubtaskModal(this.app, item.name, (subtaskName) => {
               if (subtaskName) {
-                await this.createSubtask(item, subtaskName);
+                void this.createSubtask(item, subtaskName);
               }
             }).open();
           });
@@ -1133,9 +1136,9 @@ var MondayView = class extends import_obsidian.ItemView {
     const notePath = (0, import_obsidian.normalizePath)(`${noteFolder}/${noteName}.md`);
     const existingFile = app.vault.getAbstractFileByPath(notePath);
     if (existingFile && existingFile instanceof import_obsidian.TFile) {
-      new DuplicateNoteModal(app, notePath, async (action) => {
+      new DuplicateNoteModal(app, notePath, (action) => {
         if (action === "open") {
-          await app.workspace.openLinkText(notePath, "", false);
+          void app.workspace.openLinkText(notePath, "", false);
         } else if (action === "create") {
           let counter = 1;
           let newPath = notePath;
@@ -1143,7 +1146,7 @@ var MondayView = class extends import_obsidian.ItemView {
             newPath = (0, import_obsidian.normalizePath)(`${noteFolder}/${noteName} (${counter}).md`);
             counter++;
           }
-          await this.createNoteForItem(item, boardData, newPath);
+          void this.createNoteForItem(item, boardData, newPath);
         }
       }).open();
     } else {
@@ -1387,9 +1390,9 @@ var MondayView = class extends import_obsidian.ItemView {
     }
     menu.addItem((menuItem) => {
       menuItem.setTitle("Add comment").setIcon("message-square").onClick(() => {
-        new AddCommentModal(this.app, item.name, async (comment) => {
+        new AddCommentModal(this.app, item.name, (comment) => {
           if (comment) {
-            await this.addItemComment(item, comment);
+            void this.addItemComment(item, comment);
           }
         }).open();
       });
@@ -1404,9 +1407,9 @@ var MondayView = class extends import_obsidian.ItemView {
             this.plugin,
             item.name,
             currentAssignees,
-            async (userIds) => {
+            (userIds) => {
               if (userIds !== null && this.selectedBoardId) {
-                await this.assignPersonToItem(item, boardData, peopleColumn.id, userIds);
+                void this.assignPersonToItem(item, boardData, peopleColumn.id, userIds);
               }
             }
           ).open();
@@ -1415,9 +1418,9 @@ var MondayView = class extends import_obsidian.ItemView {
     }
     menu.addItem((menuItem) => {
       menuItem.setTitle("Add subtask").setIcon("list-plus").onClick(() => {
-        new CreateSubtaskModal(this.app, item.name, async (subtaskName) => {
+        new CreateSubtaskModal(this.app, item.name, (subtaskName) => {
           if (subtaskName) {
-            await this.createSubtask(item, subtaskName);
+            void this.createSubtask(item, subtaskName);
           }
         }).open();
       });
@@ -1486,9 +1489,9 @@ var MondayView = class extends import_obsidian.ItemView {
           this.plugin,
           subitem.name,
           currentAssignees,
-          async (userIds) => {
+          (userIds) => {
             if (userIds !== null) {
-              await this.assignPersonToSubitem(subitem, parentItem, boardData, userIds);
+              void this.assignPersonToSubitem(subitem, parentItem, boardData, userIds);
             }
           }
         ).open();
@@ -1684,7 +1687,7 @@ var MondayTeamView = class extends import_obsidian.ItemView {
     return MONDAY_TEAM_VIEW_TYPE;
   }
   getDisplayText() {
-    return "Monday Team";
+    return "Monday team";
   }
   getIcon() {
     return "users";
@@ -1710,7 +1713,7 @@ var MondayTeamView = class extends import_obsidian.ItemView {
       return;
     }
     const headerEl = container.createEl("div", { cls: "monday-sidebar-header" });
-    headerEl.createEl("h4", { text: "Team Summary" });
+    headerEl.createEl("h4", { text: "Team summary" });
     const refreshBtn = headerEl.createEl("button", { cls: "monday-sidebar-refresh" });
     refreshBtn.setText("\u21BB");
     refreshBtn.title = "Refresh";
@@ -1930,7 +1933,7 @@ var MondayTeamView = class extends import_obsidian.ItemView {
     if (mondayLeaves.length > 0) {
       const mondayView = mondayLeaves[0].view;
       mondayView.setPersonFilter(personName);
-      workspace.revealLeaf(mondayLeaves[0]);
+      void workspace.revealLeaf(mondayLeaves[0]);
       new import_obsidian.Notice(`Filtered by: ${personName}`);
     } else {
       void this.plugin.activateView().then(() => {
@@ -2195,9 +2198,9 @@ var CreateTaskModal = class extends import_obsidian.Modal {
         this.selectedBoardId = board.id;
       }
     }
-    boardDropdown.addEventListener("change", async () => {
+    boardDropdown.addEventListener("change", () => {
       this.selectedBoardId = boardDropdown.value;
-      await this.loadGroups();
+      void this.loadGroups();
     });
     const groupContainer = contentEl.createEl("div", { cls: "monday-modal-field" });
     groupContainer.createEl("label", { text: "Group" });
@@ -2323,13 +2326,13 @@ var StatusBarManager = class {
     this.statusBarEl.addEventListener("click", () => {
       void this.plugin.activateView();
     });
-    void this.update();
+    this.update();
   }
-  async update() {
+  update() {
     if (!this.statusBarEl)
       return;
     if (!this.plugin.settings.apiToken) {
-      this.statusBarEl.setText("Monday: Not configured");
+      this.statusBarEl.setText("Monday: not configured");
       return;
     }
     const boardCount = this.plugin.settings.cachedBoards.length;
@@ -2417,7 +2420,7 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
         });
       });
     }
-    new import_obsidian.Setting(containerEl).setName("Display settings").setHeading();
+    new import_obsidian.Setting(containerEl).setName("Display").setHeading();
     new import_obsidian.Setting(containerEl).setName("Show status bar").setDesc("Display Monday.com sync status in the status bar").addToggle((toggle) => toggle.setValue(this.plugin.settings.showStatusBar).onChange(async (value) => {
       this.plugin.settings.showStatusBar = value;
       await this.plugin.saveSettings();
@@ -2518,7 +2521,7 @@ var MondayIntegrationPlugin = class extends import_obsidian.Plugin {
     this.addRibbonIcon("calendar-check", "Open Monday.com", () => {
       void this.activateView();
     });
-    this.addRibbonIcon("users", "Open Monday Team Summary", () => {
+    this.addRibbonIcon("users", "Open Monday team summary", () => {
       void this.activateTeamView();
     });
     this.addCommand({
@@ -2614,7 +2617,7 @@ title: My Tasks
       }
     }
     if (leaf) {
-      workspace.revealLeaf(leaf);
+      void workspace.revealLeaf(leaf);
     }
   }
   async activateTeamView() {
@@ -2631,7 +2634,7 @@ title: My Tasks
       }
     }
     if (leaf) {
-      workspace.revealLeaf(leaf);
+      void workspace.revealLeaf(leaf);
     }
   }
   // Sync board selection across all Monday views

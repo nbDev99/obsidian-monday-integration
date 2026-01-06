@@ -839,14 +839,15 @@ function parseDashboardOptions(source: string): DashboardOptions {
             case 'columns':
                 options.columns = value.split(',').map(c => c.trim().toLowerCase()).filter(c => c);
                 break;
-            case 'style':
+            case 'style': {
                 const styleValue = value.toLowerCase();
                 if (styleValue === 'table' || styleValue === 'compact' || styleValue === 'cards') {
                     options.style = styleValue;
                 }
                 break;
+            }
             case 'status':
-            case 'filter':
+            case 'filter': {
                 // Parse status filter: "On Hold, Working on it" or "!Done, !Stuck" (exclude)
                 const statuses = value.split(',').map(s => s.trim()).filter(s => s);
                 for (const status of statuses) {
@@ -857,7 +858,8 @@ function parseDashboardOptions(source: string): DashboardOptions {
                     }
                 }
                 break;
-            case 'group':
+            }
+            case 'group': {
                 // Parse group filter: "Sprint 1, Backlog" or "!Done, !Archive" (exclude)
                 const groups = value.split(',').map(g => g.trim()).filter(g => g);
                 for (const group of groups) {
@@ -868,6 +870,7 @@ function parseDashboardOptions(source: string): DashboardOptions {
                     }
                 }
                 break;
+            }
         }
     }
 
@@ -1385,11 +1388,11 @@ class MondayView extends ItemView {
                         }
                     }
 
-                    statusDropdown.addEventListener('change', async (e) => {
+                    statusDropdown.addEventListener('change', (e) => {
                         e.stopPropagation();
                         const newStatus = (e.target as HTMLSelectElement).value;
                         if (newStatus !== currentStatus && this.selectedBoardId) {
-                            await this.changeItemStatus(item, statusColumn.id, newStatus);
+                            void this.changeItemStatus(item, statusColumn.id, newStatus);
                         }
                     });
 
@@ -1507,9 +1510,9 @@ class MondayView extends ItemView {
                     addSubtaskBtn.createEl('span', { text: '+ Add subtask', cls: 'monday-add-subtask-text' });
                     addSubtaskBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
-                        new CreateSubtaskModal(this.app, item.name, async (subtaskName) => {
+                        new CreateSubtaskModal(this.app, item.name, (subtaskName) => {
                             if (subtaskName) {
-                                await this.createSubtask(item, subtaskName);
+                                void this.createSubtask(item, subtaskName);
                             }
                         }).open();
                     });
@@ -1538,9 +1541,9 @@ class MondayView extends ItemView {
 
         if (existingFile && existingFile instanceof TFile) {
             // File exists - show modal
-            new DuplicateNoteModal(app, notePath, async (action) => {
+            new DuplicateNoteModal(app, notePath, (action) => {
                 if (action === 'open') {
-                    await app.workspace.openLinkText(notePath, '', false);
+                    void app.workspace.openLinkText(notePath, '', false);
                 } else if (action === 'create') {
                     // Create with incremented name
                     let counter = 1;
@@ -1549,7 +1552,7 @@ class MondayView extends ItemView {
                         newPath = normalizePath(`${noteFolder}/${noteName} (${counter}).md`);
                         counter++;
                     }
-                    await this.createNoteForItem(item, boardData, newPath);
+                    void this.createNoteForItem(item, boardData, newPath);
                 }
             }).open();
         } else {
@@ -1831,9 +1834,9 @@ class MondayView extends ItemView {
                 .setTitle('Add comment')
                 .setIcon('message-square')
                 .onClick(() => {
-                    new AddCommentModal(this.app, item.name, async (comment) => {
+                    new AddCommentModal(this.app, item.name, (comment) => {
                         if (comment) {
-                            await this.addItemComment(item, comment);
+                            void this.addItemComment(item, comment);
                         }
                     }).open();
                 });
@@ -1853,9 +1856,9 @@ class MondayView extends ItemView {
                             this.plugin,
                             item.name,
                             currentAssignees,
-                            async (userIds) => {
+                            (userIds) => {
                                 if (userIds !== null && this.selectedBoardId) {
-                                    await this.assignPersonToItem(item, boardData, peopleColumn.id, userIds);
+                                    void this.assignPersonToItem(item, boardData, peopleColumn.id, userIds);
                                 }
                             }
                         ).open();
@@ -1869,9 +1872,9 @@ class MondayView extends ItemView {
                 .setTitle('Add subtask')
                 .setIcon('list-plus')
                 .onClick(() => {
-                    new CreateSubtaskModal(this.app, item.name, async (subtaskName) => {
+                    new CreateSubtaskModal(this.app, item.name, (subtaskName) => {
                         if (subtaskName) {
-                            await this.createSubtask(item, subtaskName);
+                            void this.createSubtask(item, subtaskName);
                         }
                     }).open();
                 });
@@ -1967,9 +1970,9 @@ class MondayView extends ItemView {
                         this.plugin,
                         subitem.name,
                         currentAssignees,
-                        async (userIds) => {
+                        (userIds) => {
                             if (userIds !== null) {
-                                await this.assignPersonToSubitem(subitem, parentItem, boardData, userIds);
+                                void this.assignPersonToSubitem(subitem, parentItem, boardData, userIds);
                             }
                         }
                     ).open();
@@ -2207,7 +2210,7 @@ class MondayTeamView extends ItemView {
     }
 
     getDisplayText(): string {
-        return 'Monday Team';
+        return 'Monday team';
     }
 
     getIcon(): string {
@@ -2243,7 +2246,7 @@ class MondayTeamView extends ItemView {
 
         // Header
         const headerEl = container.createEl('div', { cls: 'monday-sidebar-header' });
-        headerEl.createEl('h4', { text: 'Team Summary' });
+        headerEl.createEl('h4', { text: 'Team summary' });
 
         const refreshBtn = headerEl.createEl('button', { cls: 'monday-sidebar-refresh' });
         refreshBtn.setText('↻');
@@ -2536,7 +2539,7 @@ class MondayTeamView extends ItemView {
         if (mondayLeaves.length > 0) {
             const mondayView = mondayLeaves[0].view as MondayView;
             mondayView.setPersonFilter(personName);
-            workspace.revealLeaf(mondayLeaves[0]);
+            void workspace.revealLeaf(mondayLeaves[0]);
             new Notice(`Filtered by: ${personName}`);
         } else {
             // Open the main view first, then filter
@@ -2922,9 +2925,9 @@ class CreateTaskModal extends Modal {
             }
         }
 
-        boardDropdown.addEventListener('change', async () => {
+        boardDropdown.addEventListener('change', () => {
             this.selectedBoardId = boardDropdown.value;
-            await this.loadGroups();
+            void this.loadGroups();
         });
 
         // Group dropdown
@@ -3087,14 +3090,14 @@ class StatusBarManager {
             void this.plugin.activateView();
         });
 
-        void this.update();
+        this.update();
     }
 
-    async update() {
+    update() {
         if (!this.statusBarEl) return;
 
         if (!this.plugin.settings.apiToken) {
-            this.statusBarEl.setText('Monday: Not configured');
+            this.statusBarEl.setText('Monday: not configured');
             return;
         }
 
@@ -3230,9 +3233,9 @@ class MondaySettingTab extends PluginSettingTab {
                 });
         }
 
-        // Display settings
+        // Display options
         new Setting(containerEl)
-            .setName('Display settings')
+            .setName('Display')
             .setHeading();
 
         new Setting(containerEl)
@@ -3406,7 +3409,7 @@ export default class MondayIntegrationPlugin extends Plugin {
         });
 
         // Add ribbon icon for team view
-        this.addRibbonIcon('users', 'Open Monday Team Summary', () => {
+        this.addRibbonIcon('users', 'Open Monday team summary', () => {
             void this.activateTeamView();
         });
 
@@ -3517,7 +3520,7 @@ export default class MondayIntegrationPlugin extends Plugin {
         }
 
         if (leaf) {
-            workspace.revealLeaf(leaf);
+            void workspace.revealLeaf(leaf);
         }
     }
 
@@ -3538,7 +3541,7 @@ export default class MondayIntegrationPlugin extends Plugin {
         }
 
         if (leaf) {
-            workspace.revealLeaf(leaf);
+            void workspace.revealLeaf(leaf);
         }
     }
 
