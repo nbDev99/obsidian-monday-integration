@@ -1164,7 +1164,6 @@ var MondayView = class extends import_obsidian.ItemView {
   async createNoteForItem(item, boardData, notePath) {
     var _a, _b;
     const app = this.app;
-    const plugin = this.plugin;
     const folderPath = notePath.substring(0, notePath.lastIndexOf("/"));
     if (folderPath && !app.vault.getAbstractFileByPath(folderPath)) {
       await app.vault.createFolder(folderPath);
@@ -2464,10 +2463,10 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
     });
     usageEl.createEl("p", { text: "Options:" });
     const optionsList = usageEl.createEl("ul");
-    optionsList.createEl("li", { text: "board \u2014 board id (required if no default set)" });
-    optionsList.createEl("li", { text: "title \u2014 custom title (optional)" });
-    optionsList.createEl("li", { text: "limit \u2014 max items to show (default: 25)" });
-    optionsList.createEl("li", { text: "columns \u2014 comma-separated column ids to display" });
+    optionsList.createEl("li").setText("board: the board id (required if no default set)");
+    optionsList.createEl("li").setText("title: a custom title (optional)");
+    optionsList.createEl("li").setText("limit: max items to show (default: 25)");
+    optionsList.createEl("li").setText("columns: column ids to display, comma-separated");
     new import_obsidian.Setting(containerEl).setName("Support this plugin").setHeading();
     const supportEl = containerEl.createEl("div", { cls: "monday-support" });
     supportEl.createEl("p", {

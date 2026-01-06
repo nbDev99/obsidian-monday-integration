@@ -1578,7 +1578,6 @@ class MondayView extends ItemView {
 
     private async createNoteForItem(item: Item, boardData: BoardData, notePath: string) {
         const app = this.app;
-        const plugin = this.plugin;
 
         // Ensure folder exists
         const folderPath = notePath.substring(0, notePath.lastIndexOf('/'));
@@ -3323,10 +3322,10 @@ class MondaySettingTab extends PluginSettingTab {
 
         usageEl.createEl('p', { text: 'Options:' });
         const optionsList = usageEl.createEl('ul');
-        optionsList.createEl('li', { text: 'board — board id (required if no default set)' });
-        optionsList.createEl('li', { text: 'title — custom title (optional)' });
-        optionsList.createEl('li', { text: 'limit — max items to show (default: 25)' });
-        optionsList.createEl('li', { text: 'columns — comma-separated column ids to display' });
+        optionsList.createEl('li').setText('board: the board id (required if no default set)');
+        optionsList.createEl('li').setText('title: a custom title (optional)');
+        optionsList.createEl('li').setText('limit: max items to show (default: 25)');
+        optionsList.createEl('li').setText('columns: column ids to display, comma-separated');
 
         // Support section
         new Setting(containerEl)
