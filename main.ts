@@ -3092,7 +3092,7 @@ class StatusBarManager {
         if (!this.statusBarEl) return;
 
         if (!this.plugin.settings.apiToken) {
-            this.statusBarEl.setText('Monday: Not configured');
+            this.statusBarEl.setText('Monday: not configured');
             return;
         }
 
@@ -3322,10 +3322,10 @@ class MondaySettingTab extends PluginSettingTab {
 
         usageEl.createEl('p', { text: 'Options:' });
         const optionsList = usageEl.createEl('ul');
-        optionsList.createEl('li').setText('Board: The board id (required if no default set)');
-        optionsList.createEl('li').setText('Title: A custom title (optional)');
-        optionsList.createEl('li').setText('Limit: Max items to show (default: 25)');
-        optionsList.createEl('li').setText('Columns: Column ids to display, comma-separated');
+        optionsList.createEl('li').setText('Board: the board id (required if no default set)');
+        optionsList.createEl('li').setText('Title: a custom title (optional)');
+        optionsList.createEl('li').setText('Limit: max items to show (default: 25)');
+        optionsList.createEl('li').setText('Columns: column ids to display, comma-separated');
 
         // Support section
         new Setting(containerEl)
