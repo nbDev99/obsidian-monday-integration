@@ -3325,7 +3325,7 @@ class MondaySettingTab extends PluginSettingTab {
         optionsList.createEl('li').setText('Use board to specify the board ID, required if no default is set');
         optionsList.createEl('li').setText('Use title to set a custom title for the display');
         optionsList.createEl('li').setText('Use limit to set the maximum items shown, defaults to 25');
-        optionsList.createEl('li').setText('Use columns to specify which column IDs to display');
+        optionsList.createEl('li').setText('Use columns to specify which column ID values to display');
 
         // Support section
         new Setting(containerEl)
