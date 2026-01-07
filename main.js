@@ -1542,6 +1542,7 @@ var MondayView = class extends import_obsidian.ItemView {
       if (result) {
         new import_obsidian.Notice(`Subtask created: ${result.name}`);
         this.expandedItems.add(item.id);
+        this.currentBoardData = null;
         await this.loadAndRenderBoard(this.containerEl.children[1]);
       } else {
         new import_obsidian.Notice("Failed to create subtask");
@@ -1598,15 +1599,24 @@ var MondayView = class extends import_obsidian.ItemView {
   }
   async refreshBoards() {
     try {
-      new import_obsidian.Notice("Refreshing boards...");
+      new import_obsidian.Notice("Refreshing...");
       const boards = await this.plugin.apiClient.getBoards();
       this.plugin.settings.cachedBoards = boards;
       this.plugin.settings.lastSync = Date.now();
       await this.plugin.saveSettings();
-      new import_obsidian.Notice(`Loaded ${boards.length} boards`);
+      if (this.selectedBoardId) {
+        this.currentBoardData = await this.plugin.apiClient.getBoardData(this.selectedBoardId, 100);
+      }
+      new import_obsidian.Notice(`Refreshed ${boards.length} boards`);
       await this.render();
     } catch (error) {
       new import_obsidian.Notice(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
+    }
+  }
+  async refreshCurrentBoard() {
+    if (this.selectedBoardId) {
+      this.currentBoardData = null;
+      await this.loadAndRenderBoard(this.containerEl.children[1]);
     }
   }
   getItemAssignees(item, peopleColumns) {
@@ -2289,6 +2299,7 @@ var CreateTaskModal = class extends import_obsidian.Modal {
       if (result) {
         new import_obsidian.Notice(`Task created: ${result.name}`);
         this.close();
+        await this.plugin.refreshSidebarViews();
       } else {
         new import_obsidian.Notice("Failed to create task");
         if (this.submitBtn) {
@@ -2651,6 +2662,19 @@ title: My Tasks
         const view = leaf.view;
         view.setBoard(boardId);
       }
+    }
+  }
+  async refreshSidebarViews() {
+    const { workspace } = this.app;
+    const mondayLeaves = workspace.getLeavesOfType(MONDAY_VIEW_TYPE);
+    for (const leaf of mondayLeaves) {
+      const view = leaf.view;
+      await view.refreshCurrentBoard();
+    }
+    const teamLeaves = workspace.getLeavesOfType(MONDAY_TEAM_VIEW_TYPE);
+    for (const leaf of teamLeaves) {
+      const view = leaf.view;
+      await view.render();
     }
   }
   onunload() {

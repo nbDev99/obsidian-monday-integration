@@ -2031,7 +2031,8 @@ class MondayView extends ItemView {
                 new Notice(`Subtask created: ${result.name}`);
                 // Expand the item to show the new subtask
                 this.expandedItems.add(item.id);
-                // Refresh to show the new subtask
+                // Clear cache and refresh to show the new subtask
+                this.currentBoardData = null;
                 await this.loadAndRenderBoard(this.containerEl.children[1] as HTMLElement);
             } else {
                 new Notice('Failed to create subtask');
@@ -2101,15 +2102,30 @@ class MondayView extends ItemView {
 
     private async refreshBoards() {
         try {
-            new Notice('Refreshing boards...');
+            new Notice('Refreshing...');
+
+            // Refresh the boards list
             const boards = await this.plugin.apiClient.getBoards();
             this.plugin.settings.cachedBoards = boards;
             this.plugin.settings.lastSync = Date.now();
             await this.plugin.saveSettings();
-            new Notice(`Loaded ${boards.length} boards`);
+
+            // Also refresh the current board's items if one is selected
+            if (this.selectedBoardId) {
+                this.currentBoardData = await this.plugin.apiClient.getBoardData(this.selectedBoardId, 100);
+            }
+
+            new Notice(`Refreshed ${boards.length} boards`);
             await this.render();
         } catch (error) {
             new Notice(`Error: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    async refreshCurrentBoard() {
+        if (this.selectedBoardId) {
+            this.currentBoardData = null;
+            await this.loadAndRenderBoard(this.containerEl.children[1] as HTMLElement);
         }
     }
 
@@ -3040,6 +3056,8 @@ class CreateTaskModal extends Modal {
             if (result) {
                 new Notice(`Task created: ${result.name}`);
                 this.close();
+                // Refresh sidebar views to show the new task
+                await this.plugin.refreshSidebarViews();
             } else {
                 new Notice('Failed to create task');
                 if (this.submitBtn) {
@@ -3561,6 +3579,24 @@ export default class MondayIntegrationPlugin extends Plugin {
                 const view = leaf.view as MondayTeamView;
                 view.setBoard(boardId);
             }
+        }
+    }
+
+    async refreshSidebarViews() {
+        const { workspace } = this.app;
+
+        // Refresh main Monday views
+        const mondayLeaves = workspace.getLeavesOfType(MONDAY_VIEW_TYPE);
+        for (const leaf of mondayLeaves) {
+            const view = leaf.view as MondayView;
+            await view.refreshCurrentBoard();
+        }
+
+        // Refresh team views
+        const teamLeaves = workspace.getLeavesOfType(MONDAY_TEAM_VIEW_TYPE);
+        for (const leaf of teamLeaves) {
+            const view = leaf.view as MondayTeamView;
+            await view.render();
         }
     }
 

@@ -1,6 +1,6 @@
 {
     "name": "monday-integration",
-    "version": "1.9.5",
+    "version": "1.9.6",
     "description": "View Monday.com boards and items directly in your notes and sidebar",
     "main": "main.js",
     "scripts": {
