@@ -2492,7 +2492,7 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
       cls: "monday-coffee-button"
     });
     coffeeImg.setAttr("src", "https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png");
-    coffeeImg.setAttr("alt", "Buy Me A Coffee");
+    coffeeImg.setAttr("alt", "Buy me a coffee");
     coffeeImg.setAttr("height", "50");
   }
 };
