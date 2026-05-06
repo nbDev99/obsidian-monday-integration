@@ -10,6 +10,14 @@
     "keywords": ["obsidian", "plugin", "monday", "monday.com", "project-management", "dashboard"],
     "author": "MA Frampton",
     "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/nbDev99/obsidian-monday-integration.git"
+    },
+    "bugs": {
+        "url": "https://github.com/nbDev99/obsidian-monday-integration/issues"
+    },
+    "homepage": "https://github.com/nbDev99/obsidian-monday-integration#readme",
     "devDependencies": {
         "@types/node": "^16.11.6",
         "@typescript-eslint/eslint-plugin": "5.29.0",
