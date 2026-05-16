@@ -70,6 +70,29 @@ interface ColumnValue {
     value: string | null;
 }
 
+// Shapes of the JSON string stored in ColumnValue.value, by column type.
+interface StatusColumnJson {
+    index?: number;
+    label_style?: { color?: string };
+}
+
+interface PeopleColumnJson {
+    personsAndTeams?: Array<{ id: number; kind: string }>;
+}
+
+interface DateColumnJson {
+    date?: string;
+    to?: string;
+}
+
+// Obsidian exposes app.setting as an internal API not in the public types.
+interface AppWithSettingApi {
+    setting: {
+        open(): void;
+        openTabById(id: string): void;
+    };
+}
+
 interface Column {
     id: string;
     title: string;
@@ -472,7 +495,7 @@ class MondayApiClient {
         }
     }
 
-    async assignPersonToSubitem(parentItemId: string, subitemId: string, columnId: string, personIds: number[]): Promise<boolean> {
+    async assignPersonToSubitem(_parentItemId: string, subitemId: string, columnId: string, personIds: number[]): Promise<boolean> {
         try {
             // For subitems, we need to get the subitem's board ID first
             interface SubitemBoardResponse {
@@ -627,29 +650,29 @@ class MondayDashboardRenderer extends MarkdownRenderChild {
     }
 
     private renderLoading(container: HTMLElement) {
-        const loadingEl = container.createEl('div', { cls: 'monday-loading' });
-        loadingEl.createEl('div', { cls: 'monday-spinner' });
-        loadingEl.createEl('div', { text: 'Loading data...', cls: 'monday-loading-text' });
+        const loadingEl = container.createDiv({ cls: 'monday-loading' });
+        loadingEl.createDiv({ cls: 'monday-spinner' });
+        loadingEl.createDiv({ text: 'Loading data...', cls: 'monday-loading-text' });
     }
 
     private renderError(container: HTMLElement, message: string) {
-        const errorEl = container.createEl('div', { cls: 'monday-error' });
-        errorEl.createEl('span', { text: message });
+        const errorEl = container.createDiv({ cls: 'monday-error' });
+        errorEl.createSpan({ text: message });
     }
 
     private renderBoard(container: HTMLElement, boardData: BoardData) {
         // Title
         const title = this.options.title || boardData.name;
-        container.createEl('div', { text: title, cls: 'monday-board-title' });
+        container.createDiv({ text: title, cls: 'monday-board-title' });
 
         // Refresh button and style indicator
-        const headerEl = container.createEl('div', { cls: 'monday-header-actions' });
-        headerEl.createEl('span', { text: this.options.style, cls: 'monday-style-badge' });
+        const headerEl = container.createDiv({ cls: 'monday-header-actions' });
+        headerEl.createSpan({ text: this.options.style, cls: 'monday-style-badge' });
         const refreshBtn = headerEl.createEl('button', { text: 'Refresh', cls: 'monday-refresh-btn' });
         refreshBtn.addEventListener('click', () => void this.render());
 
         if (boardData.items.length === 0) {
-            container.createEl('div', { text: 'No items found', cls: 'monday-empty' });
+            container.createDiv({ text: 'No items found', cls: 'monday-empty' });
             return;
         }
 
@@ -668,7 +691,7 @@ class MondayDashboardRenderer extends MarkdownRenderChild {
         }
 
         // Item count
-        container.createEl('div', {
+        container.createDiv({
             text: `Showing ${boardData.items.length} items`,
             cls: 'monday-item-count'
         });
@@ -682,12 +705,12 @@ class MondayDashboardRenderer extends MarkdownRenderChild {
 
     private renderStatusBadge(container: HTMLElement, colValue: ColumnValue, column: Column) {
         if (column.type === 'status') {
-            const statusBadge = container.createEl('span', {
+            const statusBadge = container.createSpan({
                 text: colValue.text,
                 cls: 'monday-status-badge'
             });
             try {
-                const valueObj = colValue.value ? JSON.parse(colValue.value) : null;
+                const valueObj = colValue.value ? JSON.parse(colValue.value) as StatusColumnJson : null;
                 if (valueObj?.label_style?.color) {
                     statusBadge.style.backgroundColor = valueObj.label_style.color;
                 }
@@ -695,23 +718,23 @@ class MondayDashboardRenderer extends MarkdownRenderChild {
                 // Use default colour
             }
         } else {
-            container.createEl('span', { text: colValue.text });
+            container.createSpan({ text: colValue.text });
         }
     }
 
     private renderCards(container: HTMLElement, boardData: BoardData) {
-        const itemsContainer = container.createEl('div', { cls: 'monday-items monday-items-cards' });
+        const itemsContainer = container.createDiv({ cls: 'monday-items monday-items-cards' });
         const columnsToShow = this.getColumnsToShow(boardData);
 
         for (const item of boardData.items) {
-            const card = itemsContainer.createEl('div', { cls: 'monday-item-card' });
+            const card = itemsContainer.createDiv({ cls: 'monday-item-card' });
 
             // Item name
-            card.createEl('div', { text: item.name, cls: 'monday-item-name' });
+            card.createDiv({ text: item.name, cls: 'monday-item-name' });
 
             // Group badge
             if (item.group) {
-                const groupBadge = card.createEl('span', {
+                const groupBadge = card.createSpan({
                     text: item.group.title,
                     cls: 'monday-group-badge'
                 });
@@ -719,13 +742,13 @@ class MondayDashboardRenderer extends MarkdownRenderChild {
             }
 
             // Column values
-            const columnsEl = card.createEl('div', { cls: 'monday-item-columns' });
+            const columnsEl = card.createDiv({ cls: 'monday-item-columns' });
 
             for (const column of columnsToShow) {
                 const colValue = item.column_values.find(cv => cv.id === column.id);
                 if (colValue && colValue.text) {
-                    const colEl = columnsEl.createEl('div', { cls: 'monday-column-value' });
-                    colEl.createEl('span', { text: column.title + ': ', cls: 'monday-column-label' });
+                    const colEl = columnsEl.createDiv({ cls: 'monday-column-value' });
+                    colEl.createSpan({ text: column.title + ': ', cls: 'monday-column-label' });
                     this.renderStatusBadge(colEl, colValue, column);
                 }
             }
@@ -733,7 +756,7 @@ class MondayDashboardRenderer extends MarkdownRenderChild {
     }
 
     private renderTable(container: HTMLElement, boardData: BoardData) {
-        const tableContainer = container.createEl('div', { cls: 'monday-table-container' });
+        const tableContainer = container.createDiv({ cls: 'monday-table-container' });
         const table = tableContainer.createEl('table', { cls: 'monday-table' });
         const columnsToShow = this.getColumnsToShow(boardData);
 
@@ -757,7 +780,7 @@ class MondayDashboardRenderer extends MarkdownRenderChild {
             // Group
             const groupCell = row.createEl('td');
             if (item.group) {
-                const groupBadge = groupCell.createEl('span', {
+                const groupBadge = groupCell.createSpan({
                     text: item.group.title,
                     cls: 'monday-group-badge monday-group-badge-small'
                 });
@@ -776,11 +799,11 @@ class MondayDashboardRenderer extends MarkdownRenderChild {
     }
 
     private renderCompact(container: HTMLElement, boardData: BoardData) {
-        const listContainer = container.createEl('div', { cls: 'monday-items monday-items-compact' });
+        const listContainer = container.createDiv({ cls: 'monday-items monday-items-compact' });
         const columnsToShow = this.getColumnsToShow(boardData);
 
         for (const item of boardData.items) {
-            const itemEl = listContainer.createEl('div', { cls: 'monday-compact-item' });
+            const itemEl = listContainer.createDiv({ cls: 'monday-compact-item' });
 
             // Status badge first (if present)
             const statusCol = columnsToShow.find(c => c.type === 'status');
@@ -792,11 +815,11 @@ class MondayDashboardRenderer extends MarkdownRenderChild {
             }
 
             // Item name
-            itemEl.createEl('span', { text: item.name, cls: 'monday-compact-name' });
+            itemEl.createSpan({ text: item.name, cls: 'monday-compact-name' });
 
             // Group badge (small)
             if (item.group) {
-                const groupBadge = itemEl.createEl('span', {
+                const groupBadge = itemEl.createSpan({
                     text: item.group.title,
                     cls: 'monday-group-badge monday-group-badge-small'
                 });
@@ -928,20 +951,19 @@ class MondayView extends ItemView {
 
         // Check for API token
         if (!this.plugin.settings.apiToken) {
-            const errorEl = container.createEl('div', { cls: 'monday-sidebar-error' });
+            const errorEl = container.createDiv({ cls: 'monday-sidebar-error' });
             errorEl.createEl('p', { text: 'API token not configured.' });
             const settingsBtn = errorEl.createEl('button', { text: 'Open settings' });
             settingsBtn.addEventListener('click', () => {
-                // @ts-ignore - Obsidian internal API
-                this.app.setting.open();
-                // @ts-ignore
-                this.app.setting.openTabById('monday-integration');
+                const settingApi = (this.app as unknown as AppWithSettingApi).setting;
+                settingApi.open();
+                settingApi.openTabById('monday-integration');
             });
             return;
         }
 
         // Header
-        const headerEl = container.createEl('div', { cls: 'monday-sidebar-header' });
+        const headerEl = container.createDiv({ cls: 'monday-sidebar-header' });
         headerEl.createEl('h4', { text: 'Monday.com' });
 
         const refreshBtn = headerEl.createEl('button', { cls: 'monday-sidebar-refresh' });
@@ -950,7 +972,7 @@ class MondayView extends ItemView {
         refreshBtn.addEventListener('click', () => void this.refreshBoards());
 
         // Board selector
-        const selectorEl = container.createEl('div', { cls: 'monday-board-selector' });
+        const selectorEl = container.createDiv({ cls: 'monday-board-selector' });
         const selectEl = selectorEl.createEl('select', { cls: 'monday-board-select' });
 
         const defaultOption = selectEl.createEl('option', { text: 'Select a board...', value: '' });
@@ -980,10 +1002,10 @@ class MondayView extends ItemView {
         });
 
         // Filters container (populated after board is loaded)
-        container.createEl('div', { cls: 'monday-sidebar-filters' });
+        container.createDiv({ cls: 'monday-sidebar-filters' });
 
         // Items container
-        const itemsContainer = container.createEl('div', { cls: 'monday-sidebar-items' });
+        const itemsContainer = container.createDiv({ cls: 'monday-sidebar-items' });
 
         if (this.selectedBoardId) {
             await this.loadAndRenderBoard(container);
@@ -1002,7 +1024,7 @@ class MondayView extends ItemView {
         // Show loading
         if (itemsContainer) {
             itemsContainer.empty();
-            itemsContainer.createEl('div', { text: 'Loading items...', cls: 'monday-sidebar-loading' });
+            itemsContainer.createDiv({ text: 'Loading items...', cls: 'monday-sidebar-loading' });
         }
 
         try {
@@ -1095,17 +1117,17 @@ class MondayView extends ItemView {
 
         // Status filter checkboxes
         if (statuses.size > 0) {
-            const statusSection = container.createEl('div', { cls: 'monday-filter-section collapsed' });
+            const statusSection = container.createDiv({ cls: 'monday-filter-section collapsed' });
 
             // Header (clickable to expand/collapse)
-            const statusHeader = statusSection.createEl('div', { cls: 'monday-filter-header' });
+            const statusHeader = statusSection.createDiv({ cls: 'monday-filter-header' });
 
-            const statusTitleArea = statusHeader.createEl('div', { cls: 'monday-filter-title-area' });
-            statusTitleArea.createEl('span', { cls: 'monday-filter-chevron', text: '▶' });
-            statusTitleArea.createEl('span', { text: 'Status', cls: 'monday-filter-title' });
+            const statusTitleArea = statusHeader.createDiv({ cls: 'monday-filter-title-area' });
+            statusTitleArea.createSpan({ cls: 'monday-filter-chevron', text: '▶' });
+            statusTitleArea.createSpan({ text: 'Status', cls: 'monday-filter-title' });
 
             // Show count when collapsed
-            const statusCount = statusTitleArea.createEl('span', { cls: 'monday-filter-count' });
+            const statusCount = statusTitleArea.createSpan({ cls: 'monday-filter-count' });
             const updateStatusCount = () => {
                 const count = this.statusFilter.selected.size;
                 statusCount.textContent = count > 0 ? `(${count} ${this.statusFilter.mode === 'exclude' ? 'hidden' : 'selected'})` : '';
@@ -1116,7 +1138,7 @@ class MondayView extends ItemView {
                 statusSection.classList.toggle('collapsed');
             });
 
-            const statusControls = statusHeader.createEl('div', { cls: 'monday-filter-controls' });
+            const statusControls = statusHeader.createDiv({ cls: 'monday-filter-controls' });
 
             const statusModeBtn = statusControls.createEl('button', {
                 cls: `monday-filter-mode ${this.statusFilter.mode}`,
@@ -1154,7 +1176,7 @@ class MondayView extends ItemView {
             });
 
             // Checkbox list (collapsible)
-            const statusList = statusSection.createEl('div', { cls: 'monday-filter-list' });
+            const statusList = statusSection.createDiv({ cls: 'monday-filter-list' });
             for (const status of Array.from(statuses).sort()) {
                 const label = statusList.createEl('label', { cls: 'monday-filter-checkbox' });
                 const checkbox = label.createEl('input', { type: 'checkbox' });
@@ -1168,23 +1190,23 @@ class MondayView extends ItemView {
                     updateStatusCount();
                     refreshItems();
                 });
-                label.createEl('span', { text: status });
+                label.createSpan({ text: status });
             }
         }
 
         // Group filter checkboxes
         if (groups.size > 0) {
-            const groupSection = container.createEl('div', { cls: 'monday-filter-section collapsed' });
+            const groupSection = container.createDiv({ cls: 'monday-filter-section collapsed' });
 
             // Header (clickable to expand/collapse)
-            const groupHeader = groupSection.createEl('div', { cls: 'monday-filter-header' });
+            const groupHeader = groupSection.createDiv({ cls: 'monday-filter-header' });
 
-            const groupTitleArea = groupHeader.createEl('div', { cls: 'monday-filter-title-area' });
-            groupTitleArea.createEl('span', { cls: 'monday-filter-chevron', text: '▶' });
-            groupTitleArea.createEl('span', { text: 'Group', cls: 'monday-filter-title' });
+            const groupTitleArea = groupHeader.createDiv({ cls: 'monday-filter-title-area' });
+            groupTitleArea.createSpan({ cls: 'monday-filter-chevron', text: '▶' });
+            groupTitleArea.createSpan({ text: 'Group', cls: 'monday-filter-title' });
 
             // Show count when collapsed
-            const groupCount = groupTitleArea.createEl('span', { cls: 'monday-filter-count' });
+            const groupCount = groupTitleArea.createSpan({ cls: 'monday-filter-count' });
             const updateGroupCount = () => {
                 const count = this.groupFilter.selected.size;
                 groupCount.textContent = count > 0 ? `(${count} ${this.groupFilter.mode === 'exclude' ? 'hidden' : 'selected'})` : '';
@@ -1195,7 +1217,7 @@ class MondayView extends ItemView {
                 groupSection.classList.toggle('collapsed');
             });
 
-            const groupControls = groupHeader.createEl('div', { cls: 'monday-filter-controls' });
+            const groupControls = groupHeader.createDiv({ cls: 'monday-filter-controls' });
 
             const groupModeBtn = groupControls.createEl('button', {
                 cls: `monday-filter-mode ${this.groupFilter.mode}`,
@@ -1233,7 +1255,7 @@ class MondayView extends ItemView {
             });
 
             // Checkbox list (collapsible)
-            const groupList = groupSection.createEl('div', { cls: 'monday-filter-list' });
+            const groupList = groupSection.createDiv({ cls: 'monday-filter-list' });
             for (const group of Array.from(groups).sort()) {
                 const label = groupList.createEl('label', { cls: 'monday-filter-checkbox' });
                 const checkbox = label.createEl('input', { type: 'checkbox' });
@@ -1247,7 +1269,7 @@ class MondayView extends ItemView {
                     updateGroupCount();
                     refreshItems();
                 });
-                label.createEl('span', { text: group });
+                label.createSpan({ text: group });
             }
         }
     }
@@ -1316,8 +1338,8 @@ class MondayView extends ItemView {
 
         // Render grouped items
         for (const [groupName, items] of groupedItems) {
-            const groupEl = container.createEl('div', { cls: 'monday-sidebar-group' });
-            const groupTitleEl = groupEl.createEl('div', { text: groupName, cls: 'monday-sidebar-group-title' });
+            const groupEl = container.createDiv({ cls: 'monday-sidebar-group' });
+            const groupTitleEl = groupEl.createDiv({ text: groupName, cls: 'monday-sidebar-group-title' });
 
             // Apply rotating group colours
             const groupColors = ['#00c875', '#fdab3d', '#a25ddc', '#579bfc', '#e2445c'];
@@ -1327,15 +1349,15 @@ class MondayView extends ItemView {
             groupTitleEl.style.color = hexColor;
 
             for (const item of items) {
-                const itemWrapper = groupEl.createEl('div', { cls: 'monday-sidebar-item-wrapper' });
-                const itemEl = itemWrapper.createEl('div', { cls: 'monday-sidebar-item monday-sidebar-item-clickable' });
+                const itemWrapper = groupEl.createDiv({ cls: 'monday-sidebar-item-wrapper' });
+                const itemEl = itemWrapper.createDiv({ cls: 'monday-sidebar-item monday-sidebar-item-clickable' });
 
                 // Expand/collapse arrow for items with subitems
                 const hasSubitems = item.subitems && item.subitems.length > 0;
                 const isExpanded = this.expandedItems.has(item.id);
 
                 if (hasSubitems) {
-                    const expandBtn = itemEl.createEl('span', {
+                    const expandBtn = itemEl.createSpan({
                         cls: `monday-expand-btn ${isExpanded ? 'expanded' : ''}`,
                         text: isExpanded ? '▼' : '▶'
                     });
@@ -1354,21 +1376,21 @@ class MondayView extends ItemView {
                     });
                 } else {
                     // No subtasks - show simple bullet icon
-                    itemEl.createEl('span', {
+                    itemEl.createSpan({
                         cls: 'monday-no-subtasks-icon',
                         text: '○'
                     });
                 }
 
                 // Item name (clickable to create note)
-                const nameEl = itemEl.createEl('span', { text: item.name, cls: 'monday-sidebar-item-name' });
+                const nameEl = itemEl.createSpan({ text: item.name, cls: 'monday-sidebar-item-name' });
                 nameEl.addEventListener('click', (e) => {
                     e.stopPropagation();
                     void this.handleItemClick(item, boardData);
                 });
 
                 // Actions container
-                const actionsEl = itemEl.createEl('div', { cls: 'monday-item-actions' });
+                const actionsEl = itemEl.createDiv({ cls: 'monday-item-actions' });
 
                 // Find status column and its info
                 const statusColumn = boardData.columns.find(c => c.type === 'status');
@@ -1401,12 +1423,12 @@ class MondayView extends ItemView {
 
                 // Status badge (visual indicator)
                 if (currentStatus) {
-                    const statusBadge = actionsEl.createEl('span', {
+                    const statusBadge = actionsEl.createSpan({
                         text: currentStatus,
                         cls: 'monday-sidebar-status'
                     });
                     try {
-                        const valueObj = statusColValue?.value ? JSON.parse(statusColValue.value) : null;
+                        const valueObj = statusColValue?.value ? JSON.parse(statusColValue.value) as StatusColumnJson : null;
                         if (valueObj?.label_style?.color) {
                             statusBadge.style.backgroundColor = valueObj.label_style.color;
                         }
@@ -1424,7 +1446,7 @@ class MondayView extends ItemView {
 
                 // Render subitems if expanded
                 if (hasSubitems && isExpanded && item.subitems) {
-                    const subitemsContainer = itemWrapper.createEl('div', { cls: 'monday-subitems-container' });
+                    const subitemsContainer = itemWrapper.createDiv({ cls: 'monday-subitems-container' });
 
                     let filteredSubitemsCount = 0;
 
@@ -1439,7 +1461,7 @@ class MondayView extends ItemView {
                             for (const cv of subitem.column_values) {
                                 if (cv.value) {
                                     try {
-                                        const valueObj = JSON.parse(cv.value);
+                                        const valueObj = JSON.parse(cv.value) as StatusColumnJson;
                                         // Status columns have an 'index' property
                                         if (typeof valueObj?.index === 'number') {
                                             subitemStatus = cv.text || '';
@@ -1457,10 +1479,10 @@ class MondayView extends ItemView {
                         }
 
                         filteredSubitemsCount++;
-                        const subitemEl = subitemsContainer.createEl('div', { cls: 'monday-subitem monday-subitem-clickable' });
+                        const subitemEl = subitemsContainer.createDiv({ cls: 'monday-subitem monday-subitem-clickable' });
 
-                        subitemEl.createEl('span', { text: '└─', cls: 'monday-subitem-prefix' });
-                        const subitemNameEl = subitemEl.createEl('span', { text: subitem.name, cls: 'monday-subitem-name' });
+                        subitemEl.createSpan({ text: '└─', cls: 'monday-subitem-prefix' });
+                        const subitemNameEl = subitemEl.createSpan({ text: subitem.name, cls: 'monday-subitem-name' });
 
                         // Click handler to create note for subitem
                         subitemNameEl.addEventListener('click', (e) => {
@@ -1479,9 +1501,9 @@ class MondayView extends ItemView {
                         for (const cv of subitem.column_values) {
                             if (cv.value && cv.text) {
                                 try {
-                                    const valueObj = JSON.parse(cv.value);
+                                    const valueObj = JSON.parse(cv.value) as StatusColumnJson;
                                     if (typeof valueObj?.index === 'number') {
-                                        const statusBadge = subitemEl.createEl('span', {
+                                        const statusBadge = subitemEl.createSpan({
                                             text: cv.text,
                                             cls: 'monday-subitem-status'
                                         });
@@ -1499,15 +1521,15 @@ class MondayView extends ItemView {
 
                     // Show hint if all subitems were filtered out
                     if (filteredSubitemsCount === 0) {
-                        const hintEl = subitemsContainer.createEl('div', { cls: 'monday-subitem monday-subitems-filtered-hint' });
-                        hintEl.createEl('span', { text: '└─', cls: 'monday-subitem-prefix' });
-                        hintEl.createEl('span', { text: `(${item.subitems.length} subtasks hidden by filter)`, cls: 'monday-subitem-hint-text' });
+                        const hintEl = subitemsContainer.createDiv({ cls: 'monday-subitem monday-subitems-filtered-hint' });
+                        hintEl.createSpan({ text: '└─', cls: 'monday-subitem-prefix' });
+                        hintEl.createSpan({ text: `(${item.subitems.length} subtasks hidden by filter)`, cls: 'monday-subitem-hint-text' });
                     }
 
                     // Add subtask button
-                    const addSubtaskBtn = subitemsContainer.createEl('div', { cls: 'monday-add-subtask' });
-                    addSubtaskBtn.createEl('span', { text: '└─', cls: 'monday-subitem-prefix' });
-                    addSubtaskBtn.createEl('span', { text: '+ add subtask', cls: 'monday-add-subtask-text' });
+                    const addSubtaskBtn = subitemsContainer.createDiv({ cls: 'monday-add-subtask' });
+                    addSubtaskBtn.createSpan({ text: '└─', cls: 'monday-subitem-prefix' });
+                    addSubtaskBtn.createSpan({ text: '+ add subtask', cls: 'monday-add-subtask-text' });
                     addSubtaskBtn.addEventListener('click', (e) => {
                         e.stopPropagation();
                         new CreateSubtaskModal(this.app, item.name, (subtaskName) => {
@@ -1521,7 +1543,7 @@ class MondayView extends ItemView {
         }
 
         // Item count
-        container.createEl('div', {
+        container.createDiv({
             text: `Showing ${filteredItems.length} of ${boardData.items.length} items`,
             cls: 'monday-sidebar-item-count'
         });
@@ -1899,7 +1921,7 @@ class MondayView extends ItemView {
         for (const cv of subitem.column_values) {
             if (cv.value) {
                 try {
-                    const parsed = JSON.parse(cv.value);
+                    const parsed = JSON.parse(cv.value) as StatusColumnJson;
                     if (typeof parsed.index === 'number') {
                         statusColumnId = cv.id;
                         currentStatus = cv.text || '';
@@ -1944,7 +1966,7 @@ class MondayView extends ItemView {
         for (const cv of subitem.column_values) {
             if (cv.value && cv.text) {
                 try {
-                    const parsed = JSON.parse(cv.value);
+                    const parsed = JSON.parse(cv.value) as PeopleColumnJson;
                     if (parsed.personsAndTeams !== undefined && cv.text) {
                         const names = cv.text.split(',').map((n: string) => n.trim()).filter((n: string) => n);
                         currentAssignees.push(...names);
@@ -1999,7 +2021,7 @@ class MondayView extends ItemView {
         }
     }
 
-    private async changeSubitemStatus(subitem: Subitem, parentItem: Item, columnId: string, newStatus: string) {
+    private async changeSubitemStatus(subitem: Subitem, _parentItem: Item, columnId: string, newStatus: string) {
         try {
             new Notice(`Changing status to "${newStatus}"...`);
             await this.plugin.apiClient.changeSubitemStatus(subitem.id, columnId, newStatus);
@@ -2042,7 +2064,7 @@ class MondayView extends ItemView {
         }
     }
 
-    private async assignPersonToItem(item: Item, boardData: BoardData, columnId: string, userIds: number[]) {
+    private async assignPersonToItem(item: Item, _boardData: BoardData, columnId: string, userIds: number[]) {
         if (!this.selectedBoardId) return;
 
         try {
@@ -2066,7 +2088,7 @@ class MondayView extends ItemView {
             for (const cv of subitem.column_values) {
                 if (cv.value) {
                     try {
-                        const parsed = JSON.parse(cv.value);
+                        const parsed = JSON.parse(cv.value) as PeopleColumnJson;
                         if (parsed.personsAndTeams !== undefined) {
                             peopleColumnId = cv.id;
                             break;
@@ -2136,7 +2158,7 @@ class MondayView extends ItemView {
             const colValue = item.column_values.find(cv => cv.id === col.id);
             if (colValue?.value) {
                 try {
-                    const parsed = JSON.parse(colValue.value);
+                    const parsed = JSON.parse(colValue.value) as PeopleColumnJson;
                     if (parsed.personsAndTeams && Array.isArray(parsed.personsAndTeams)) {
                         if (colValue.text) {
                             const names = colValue.text.split(',').map((n: string) => n.trim()).filter((n: string) => n);
@@ -2188,9 +2210,9 @@ class MondayView extends ItemView {
         if (this.personFilter) {
             const filtersContainer = container.querySelector('.monday-sidebar-filters') as HTMLElement;
             if (filtersContainer) {
-                const indicator = filtersContainer.createEl('div', { cls: 'monday-person-filter-indicator' });
-                indicator.createEl('span', { text: `Filtered: ${this.personFilter}`, cls: 'monday-person-filter-text' });
-                const clearBtn = indicator.createEl('span', { text: '✕', cls: 'monday-person-filter-clear' });
+                const indicator = filtersContainer.createDiv({ cls: 'monday-person-filter-indicator' });
+                indicator.createSpan({ text: `Filtered: ${this.personFilter}`, cls: 'monday-person-filter-text' });
+                const clearBtn = indicator.createSpan({ text: '✕', cls: 'monday-person-filter-clear' });
                 clearBtn.addEventListener('click', () => {
                     this.setPersonFilter(null);
                 });
@@ -2243,20 +2265,19 @@ class MondayTeamView extends ItemView {
 
         // Check for API token
         if (!this.plugin.settings.apiToken) {
-            const errorEl = container.createEl('div', { cls: 'monday-sidebar-error' });
+            const errorEl = container.createDiv({ cls: 'monday-sidebar-error' });
             errorEl.createEl('p', { text: 'API token not configured.' });
             const settingsBtn = errorEl.createEl('button', { text: 'Open settings' });
             settingsBtn.addEventListener('click', () => {
-                // @ts-ignore - Obsidian internal API
-                this.app.setting.open();
-                // @ts-ignore
-                this.app.setting.openTabById('monday-integration');
+                const settingApi = (this.app as unknown as AppWithSettingApi).setting;
+                settingApi.open();
+                settingApi.openTabById('monday-integration');
             });
             return;
         }
 
         // Header
-        const headerEl = container.createEl('div', { cls: 'monday-sidebar-header' });
+        const headerEl = container.createDiv({ cls: 'monday-sidebar-header' });
         headerEl.createEl('h4', { text: 'Team summary' });
 
         const refreshBtn = headerEl.createEl('button', { cls: 'monday-sidebar-refresh' });
@@ -2265,7 +2286,7 @@ class MondayTeamView extends ItemView {
         refreshBtn.addEventListener('click', () => void this.render());
 
         // Board selector
-        const selectorEl = container.createEl('div', { cls: 'monday-board-selector' });
+        const selectorEl = container.createDiv({ cls: 'monday-board-selector' });
         const selectEl = selectorEl.createEl('select', { cls: 'monday-board-select' });
 
         const defaultOption = selectEl.createEl('option', { text: 'Select a board...', value: '' });
@@ -2291,7 +2312,7 @@ class MondayTeamView extends ItemView {
         });
 
         // Team stats container
-        container.createEl('div', { cls: 'monday-team-stats' });
+        container.createDiv({ cls: 'monday-team-stats' });
 
         if (this.selectedBoardId) {
             await this.loadAndRenderTeamStats(container as HTMLElement);
@@ -2308,9 +2329,9 @@ class MondayTeamView extends ItemView {
         statsContainer.empty();
 
         // Show loading
-        const loadingEl = statsContainer.createEl('div', { cls: 'monday-loading' });
-        loadingEl.createEl('div', { cls: 'monday-spinner' });
-        loadingEl.createEl('span', { text: 'Loading team data...', cls: 'monday-loading-text' });
+        const loadingEl = statsContainer.createDiv({ cls: 'monday-loading' });
+        loadingEl.createDiv({ cls: 'monday-spinner' });
+        loadingEl.createSpan({ text: 'Loading team data...', cls: 'monday-loading-text' });
 
         try {
             const boardData = await this.plugin.apiClient.getBoardData(this.selectedBoardId, 500);
@@ -2401,7 +2422,7 @@ class MondayTeamView extends ItemView {
             const colValue = item.column_values.find(cv => cv.id === col.id);
             if (colValue?.value) {
                 try {
-                    const parsed = JSON.parse(colValue.value);
+                    const parsed = JSON.parse(colValue.value) as PeopleColumnJson;
                     // People column format: { personsAndTeams: [{ id, kind }] }
                     if (parsed.personsAndTeams && Array.isArray(parsed.personsAndTeams)) {
                         // Use the text field which contains names
@@ -2438,7 +2459,7 @@ class MondayTeamView extends ItemView {
             const colValue = item.column_values.find(cv => cv.id === col.id);
             if (colValue?.value) {
                 try {
-                    const parsed = JSON.parse(colValue.value);
+                    const parsed = JSON.parse(colValue.value) as DateColumnJson;
                     // Date column format: { date: "YYYY-MM-DD" }
                     // Timeline format: { from: "YYYY-MM-DD", to: "YYYY-MM-DD" }
                     const dateStr = parsed.date || parsed.to;
@@ -2459,7 +2480,7 @@ class MondayTeamView extends ItemView {
 
     private renderTeamStats(container: HTMLElement, stats: TeamMemberStats[]) {
         for (const member of stats) {
-            const memberEl = container.createEl('div', { cls: 'monday-team-member monday-team-member-clickable' });
+            const memberEl = container.createDiv({ cls: 'monday-team-member monday-team-member-clickable' });
             memberEl.title = `Click to filter by ${member.name}`;
 
             // Click handler to filter main view
@@ -2468,14 +2489,14 @@ class MondayTeamView extends ItemView {
             });
 
             // Name
-            memberEl.createEl('span', { text: member.name, cls: 'monday-team-member-name' });
+            memberEl.createSpan({ text: member.name, cls: 'monday-team-member-name' });
 
             // Stats badges container
-            const badgesEl = memberEl.createEl('div', { cls: 'monday-team-badges' });
+            const badgesEl = memberEl.createDiv({ cls: 'monday-team-badges' });
 
             // Working on it badge (blue/orange)
             if (member.workingOnIt > 0) {
-                const workingBadge = badgesEl.createEl('span', {
+                const workingBadge = badgesEl.createSpan({
                     text: String(member.workingOnIt),
                     cls: 'monday-team-badge monday-team-badge-working'
                 });
@@ -2484,7 +2505,7 @@ class MondayTeamView extends ItemView {
 
             // Done badge (green)
             if (member.done > 0) {
-                const doneBadge = badgesEl.createEl('span', {
+                const doneBadge = badgesEl.createSpan({
                     text: String(member.done),
                     cls: 'monday-team-badge monday-team-badge-done'
                 });
@@ -2493,7 +2514,7 @@ class MondayTeamView extends ItemView {
 
             // Overdue badge (red)
             if (member.overdue > 0) {
-                const overdueBadge = badgesEl.createEl('span', {
+                const overdueBadge = badgesEl.createSpan({
                     text: String(member.overdue),
                     cls: 'monday-team-badge monday-team-badge-overdue'
                 });
@@ -2502,7 +2523,7 @@ class MondayTeamView extends ItemView {
 
             // Show dash if no stats
             if (member.workingOnIt === 0 && member.done === 0 && member.overdue === 0) {
-                badgesEl.createEl('span', { text: '-', cls: 'monday-team-no-tasks' });
+                badgesEl.createSpan({ text: '-', cls: 'monday-team-no-tasks' });
             }
         }
 
@@ -2511,24 +2532,24 @@ class MondayTeamView extends ItemView {
         const totalDone = stats.reduce((sum, s) => sum + s.done, 0);
         const totalOverdue = stats.reduce((sum, s) => sum + s.overdue, 0);
 
-        const summaryEl = container.createEl('div', { cls: 'monday-team-summary' });
-        summaryEl.createEl('span', { text: 'Total:', cls: 'monday-team-summary-label' });
+        const summaryEl = container.createDiv({ cls: 'monday-team-summary' });
+        summaryEl.createSpan({ text: 'Total:', cls: 'monday-team-summary-label' });
 
-        const summaryBadges = summaryEl.createEl('div', { cls: 'monday-team-badges' });
+        const summaryBadges = summaryEl.createDiv({ cls: 'monday-team-badges' });
 
-        const workingSummary = summaryBadges.createEl('span', {
+        const workingSummary = summaryBadges.createSpan({
             text: String(totalWorking),
             cls: 'monday-team-badge monday-team-badge-working'
         });
         workingSummary.title = 'Total working';
 
-        const doneSummary = summaryBadges.createEl('span', {
+        const doneSummary = summaryBadges.createSpan({
             text: String(totalDone),
             cls: 'monday-team-badge monday-team-badge-done'
         });
         doneSummary.title = 'Total done';
 
-        const overdueSummary = summaryBadges.createEl('span', {
+        const overdueSummary = summaryBadges.createSpan({
             text: String(totalOverdue),
             cls: 'monday-team-badge monday-team-badge-overdue'
         });
@@ -2559,7 +2580,7 @@ class MondayTeamView extends ItemView {
                 if (leaves.length > 0) {
                     const mondayView = leaves[0].view as MondayView;
                     // Wait a moment for the view to load
-                    setTimeout(() => {
+                    activeWindow.setTimeout(() => {
                         mondayView.setPersonFilter(personName);
                         new Notice(`Filtered by: ${personName}`);
                     }, 500);
@@ -2597,7 +2618,7 @@ class DuplicateNoteModal extends Modal {
         contentEl.createEl('code', { text: this.notePath, cls: 'monday-modal-path' });
         contentEl.createEl('p', { text: 'What would you like to do?' });
 
-        const buttonContainer = contentEl.createEl('div', { cls: 'monday-modal-buttons' });
+        const buttonContainer = contentEl.createDiv({ cls: 'monday-modal-buttons' });
 
         const openBtn = buttonContainer.createEl('button', { text: 'Open existing note', cls: 'mod-cta' });
         openBtn.addEventListener('click', () => {
@@ -2651,7 +2672,7 @@ class AddCommentModal extends Modal {
         });
         textArea.rows = 5;
 
-        const buttonContainer = contentEl.createEl('div', { cls: 'monday-modal-buttons' });
+        const buttonContainer = contentEl.createDiv({ cls: 'monday-modal-buttons' });
 
         const submitBtn = buttonContainer.createEl('button', { text: 'Add comment', cls: 'mod-cta' });
         submitBtn.addEventListener('click', () => {
@@ -2671,7 +2692,7 @@ class AddCommentModal extends Modal {
         });
 
         // Focus the textarea
-        setTimeout(() => textArea.focus(), 50);
+        activeWindow.setTimeout(() => textArea.focus(), 50);
     }
 
     onClose() {
@@ -2710,7 +2731,7 @@ class CreateSubtaskModal extends Modal {
             }
         });
 
-        const buttonContainer = contentEl.createEl('div', { cls: 'monday-modal-buttons' });
+        const buttonContainer = contentEl.createDiv({ cls: 'monday-modal-buttons' });
 
         const submitBtn = buttonContainer.createEl('button', { text: 'Create subtask', cls: 'mod-cta' });
         submitBtn.addEventListener('click', () => {
@@ -2741,7 +2762,7 @@ class CreateSubtaskModal extends Modal {
         });
 
         // Focus the input
-        setTimeout(() => inputEl.focus(), 50);
+        activeWindow.setTimeout(() => inputEl.focus(), 50);
     }
 
     onClose() {
@@ -2798,19 +2819,19 @@ class AssignPersonModal extends Modal {
         }
 
         // Loading indicator
-        const loadingEl = contentEl.createEl('div', { cls: 'monday-loading' });
-        loadingEl.createEl('div', { cls: 'monday-spinner' });
-        loadingEl.createEl('span', { text: 'Loading users...', cls: 'monday-loading-text' });
+        const loadingEl = contentEl.createDiv({ cls: 'monday-loading' });
+        loadingEl.createDiv({ cls: 'monday-spinner' });
+        loadingEl.createSpan({ text: 'Loading users...', cls: 'monday-loading-text' });
 
         try {
             this.users = await this.plugin.apiClient.getUsers();
             loadingEl.remove();
 
             // User list
-            const userListEl = contentEl.createEl('div', { cls: 'monday-user-list' });
+            const userListEl = contentEl.createDiv({ cls: 'monday-user-list' });
 
             for (const user of this.users) {
-                const userEl = userListEl.createEl('div', { cls: 'monday-user-item' });
+                const userEl = userListEl.createDiv({ cls: 'monday-user-item' });
 
                 const checkbox = userEl.createEl('input', {
                     attr: { type: 'checkbox', id: `user-${user.id}` }
@@ -2835,11 +2856,11 @@ class AssignPersonModal extends Modal {
                     text: user.name,
                     attr: { for: `user-${user.id}` }
                 });
-                label.createEl('span', { text: ` (${user.email})`, cls: 'monday-user-email' });
+                label.createSpan({ text: ` (${user.email})`, cls: 'monday-user-email' });
             }
 
             // Buttons
-            const buttonContainer = contentEl.createEl('div', { cls: 'monday-modal-buttons' });
+            const buttonContainer = contentEl.createDiv({ cls: 'monday-modal-buttons' });
 
             const clearBtn = buttonContainer.createEl('button', { text: 'Clear all' });
             clearBtn.addEventListener('click', () => {
@@ -2910,7 +2931,7 @@ class CreateTaskModal extends Modal {
         contentEl.createEl('h3', { text: 'Create task' });
 
         // Task name input
-        const nameContainer = contentEl.createEl('div', { cls: 'monday-modal-field' });
+        const nameContainer = contentEl.createDiv({ cls: 'monday-modal-field' });
         nameContainer.createEl('label', { text: 'Task name' });
         this.taskNameInput = nameContainer.createEl('input', {
             type: 'text',
@@ -2920,7 +2941,7 @@ class CreateTaskModal extends Modal {
         this.taskNameInput.placeholder = 'Enter task name...';
 
         // Board dropdown
-        const boardContainer = contentEl.createEl('div', { cls: 'monday-modal-field' });
+        const boardContainer = contentEl.createDiv({ cls: 'monday-modal-field' });
         boardContainer.createEl('label', { text: 'Board' });
         const boardDropdown = boardContainer.createEl('select', { cls: 'monday-board-dropdown' });
 
@@ -2942,7 +2963,7 @@ class CreateTaskModal extends Modal {
         });
 
         // Group dropdown
-        const groupContainer = contentEl.createEl('div', { cls: 'monday-modal-field' });
+        const groupContainer = contentEl.createDiv({ cls: 'monday-modal-field' });
         groupContainer.createEl('label', { text: 'Group' });
         this.groupDropdown = groupContainer.createEl('select', { cls: 'monday-group-dropdown' });
         this.groupDropdown.disabled = true;
@@ -2962,7 +2983,7 @@ class CreateTaskModal extends Modal {
         }
 
         // Buttons
-        const buttonContainer = contentEl.createEl('div', { cls: 'monday-modal-buttons' });
+        const buttonContainer = contentEl.createDiv({ cls: 'monday-modal-buttons' });
 
         this.submitBtn = buttonContainer.createEl('button', { text: 'Create task', cls: 'mod-cta' });
         this.submitBtn.disabled = true;
@@ -2975,7 +2996,7 @@ class CreateTaskModal extends Modal {
         this.taskNameInput.addEventListener('input', () => this.updateSubmitButton());
 
         // Focus task name input
-        setTimeout(() => this.taskNameInput?.focus(), 50);
+        activeWindow.setTimeout(() => this.taskNameInput?.focus(), 50);
 
         // Initial button state
         this.updateSubmitButton();
@@ -3197,7 +3218,7 @@ class MondaySettingTab extends PluginSettingTab {
                         button.setButtonText('Failed');
                     }
 
-                    setTimeout(() => {
+                    activeWindow.setTimeout(() => {
                         button.setButtonText('Test');
                         button.setDisabled(false);
                     }, 2000);
@@ -3318,7 +3339,7 @@ class MondaySettingTab extends PluginSettingTab {
                     });
             });
 
-        const templateExamples = containerEl.createEl('div', { cls: 'monday-template-examples' });
+        const templateExamples = containerEl.createDiv({ cls: 'monday-template-examples' });
         templateExamples.createEl('p', { text: 'Examples:', cls: 'monday-template-title' });
         const exampleList = templateExamples.createEl('ul');
         exampleList.createEl('li', { text: '{name} → "Fix login bug"' });
@@ -3330,7 +3351,7 @@ class MondaySettingTab extends PluginSettingTab {
             .setName('Usage')
             .setHeading();
 
-        const usageEl = containerEl.createEl('div', { cls: 'monday-usage' });
+        const usageEl = containerEl.createDiv({ cls: 'monday-usage' });
         usageEl.createEl('p', { text: 'Add a dashboard to any note by inserting a code block:' });
 
         const codeExample = usageEl.createEl('pre');
@@ -3350,7 +3371,7 @@ class MondaySettingTab extends PluginSettingTab {
             .setName('Support this plugin')
             .setHeading();
 
-        const supportEl = containerEl.createEl('div', { cls: 'monday-support' });
+        const supportEl = containerEl.createDiv({ cls: 'monday-support' });
         supportEl.createEl('p', {
             text: 'If this plugin helps you stay organised, consider buying me a coffee!'
         });
@@ -3495,7 +3516,7 @@ export default class MondayIntegrationPlugin extends Plugin {
 
         // Register editor context menu (right-click)
         this.registerEvent(
-            this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, view: MarkdownView) => {
+            this.app.workspace.on('editor-menu', (menu: Menu, editor: Editor, _view: MarkdownView) => {
                 if (!this.settings.apiToken || this.settings.cachedBoards.length === 0) {
                     return; // Don't show menu item if not configured
                 }
@@ -3605,7 +3626,8 @@ export default class MondayIntegrationPlugin extends Plugin {
     }
 
     async loadSettings() {
-        this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+        const loaded = (await this.loadData()) as Partial<MondayIntegrationSettings> | null;
+        this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
     }
 
     async saveSettings() {

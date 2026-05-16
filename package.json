@@ -1,6 +1,6 @@
 {
     "name": "monday-integration",
-    "version": "1.9.6",
+    "version": "1.9.7",
     "description": "View Monday.com boards and items directly in your notes and sidebar",
     "main": "main.js",
     "scripts": {
@@ -22,7 +22,6 @@
         "@types/node": "^16.11.6",
         "@typescript-eslint/eslint-plugin": "5.29.0",
         "@typescript-eslint/parser": "5.29.0",
-        "builtin-modules": "3.3.0",
         "esbuild": "0.17.3",
         "obsidian": "latest",
         "tslib": "2.4.0",

@@ -326,7 +326,7 @@ var MondayApiClient = class {
       throw error;
     }
   }
-  async assignPersonToSubitem(parentItemId, subitemId, columnId, personIds) {
+  async assignPersonToSubitem(_parentItemId, subitemId, columnId, personIds) {
     var _a, _b, _c;
     try {
       const boardData = await this.query(`
@@ -432,23 +432,23 @@ var MondayDashboardRenderer = class extends import_obsidian.MarkdownRenderChild 
     });
   }
   renderLoading(container) {
-    const loadingEl = container.createEl("div", { cls: "monday-loading" });
-    loadingEl.createEl("div", { cls: "monday-spinner" });
-    loadingEl.createEl("div", { text: "Loading data...", cls: "monday-loading-text" });
+    const loadingEl = container.createDiv({ cls: "monday-loading" });
+    loadingEl.createDiv({ cls: "monday-spinner" });
+    loadingEl.createDiv({ text: "Loading data...", cls: "monday-loading-text" });
   }
   renderError(container, message) {
-    const errorEl = container.createEl("div", { cls: "monday-error" });
-    errorEl.createEl("span", { text: message });
+    const errorEl = container.createDiv({ cls: "monday-error" });
+    errorEl.createSpan({ text: message });
   }
   renderBoard(container, boardData) {
     const title = this.options.title || boardData.name;
-    container.createEl("div", { text: title, cls: "monday-board-title" });
-    const headerEl = container.createEl("div", { cls: "monday-header-actions" });
-    headerEl.createEl("span", { text: this.options.style, cls: "monday-style-badge" });
+    container.createDiv({ text: title, cls: "monday-board-title" });
+    const headerEl = container.createDiv({ cls: "monday-header-actions" });
+    headerEl.createSpan({ text: this.options.style, cls: "monday-style-badge" });
     const refreshBtn = headerEl.createEl("button", { text: "Refresh", cls: "monday-refresh-btn" });
     refreshBtn.addEventListener("click", () => void this.render());
     if (boardData.items.length === 0) {
-      container.createEl("div", { text: "No items found", cls: "monday-empty" });
+      container.createDiv({ text: "No items found", cls: "monday-empty" });
       return;
     }
     switch (this.options.style) {
@@ -463,7 +463,7 @@ var MondayDashboardRenderer = class extends import_obsidian.MarkdownRenderChild 
         this.renderCards(container, boardData);
         break;
     }
-    container.createEl("div", {
+    container.createDiv({
       text: `Showing ${boardData.items.length} items`,
       cls: "monday-item-count"
     });
@@ -474,7 +474,7 @@ var MondayDashboardRenderer = class extends import_obsidian.MarkdownRenderChild 
   renderStatusBadge(container, colValue, column) {
     var _a;
     if (column.type === "status") {
-      const statusBadge = container.createEl("span", {
+      const statusBadge = container.createSpan({
         text: colValue.text,
         cls: "monday-status-badge"
       });
@@ -486,35 +486,35 @@ var MondayDashboardRenderer = class extends import_obsidian.MarkdownRenderChild 
       } catch (e) {
       }
     } else {
-      container.createEl("span", { text: colValue.text });
+      container.createSpan({ text: colValue.text });
     }
   }
   renderCards(container, boardData) {
-    const itemsContainer = container.createEl("div", { cls: "monday-items monday-items-cards" });
+    const itemsContainer = container.createDiv({ cls: "monday-items monday-items-cards" });
     const columnsToShow = this.getColumnsToShow(boardData);
     for (const item of boardData.items) {
-      const card = itemsContainer.createEl("div", { cls: "monday-item-card" });
-      card.createEl("div", { text: item.name, cls: "monday-item-name" });
+      const card = itemsContainer.createDiv({ cls: "monday-item-card" });
+      card.createDiv({ text: item.name, cls: "monday-item-name" });
       if (item.group) {
-        const groupBadge = card.createEl("span", {
+        const groupBadge = card.createSpan({
           text: item.group.title,
           cls: "monday-group-badge"
         });
         groupBadge.style.backgroundColor = item.group.color || "#579bfc";
       }
-      const columnsEl = card.createEl("div", { cls: "monday-item-columns" });
+      const columnsEl = card.createDiv({ cls: "monday-item-columns" });
       for (const column of columnsToShow) {
         const colValue = item.column_values.find((cv) => cv.id === column.id);
         if (colValue && colValue.text) {
-          const colEl = columnsEl.createEl("div", { cls: "monday-column-value" });
-          colEl.createEl("span", { text: column.title + ": ", cls: "monday-column-label" });
+          const colEl = columnsEl.createDiv({ cls: "monday-column-value" });
+          colEl.createSpan({ text: column.title + ": ", cls: "monday-column-label" });
           this.renderStatusBadge(colEl, colValue, column);
         }
       }
     }
   }
   renderTable(container, boardData) {
-    const tableContainer = container.createEl("div", { cls: "monday-table-container" });
+    const tableContainer = container.createDiv({ cls: "monday-table-container" });
     const table = tableContainer.createEl("table", { cls: "monday-table" });
     const columnsToShow = this.getColumnsToShow(boardData);
     const thead = table.createEl("thead");
@@ -530,7 +530,7 @@ var MondayDashboardRenderer = class extends import_obsidian.MarkdownRenderChild 
       row.createEl("td", { text: item.name, cls: "monday-table-item-name" });
       const groupCell = row.createEl("td");
       if (item.group) {
-        const groupBadge = groupCell.createEl("span", {
+        const groupBadge = groupCell.createSpan({
           text: item.group.title,
           cls: "monday-group-badge monday-group-badge-small"
         });
@@ -546,10 +546,10 @@ var MondayDashboardRenderer = class extends import_obsidian.MarkdownRenderChild 
     }
   }
   renderCompact(container, boardData) {
-    const listContainer = container.createEl("div", { cls: "monday-items monday-items-compact" });
+    const listContainer = container.createDiv({ cls: "monday-items monday-items-compact" });
     const columnsToShow = this.getColumnsToShow(boardData);
     for (const item of boardData.items) {
-      const itemEl = listContainer.createEl("div", { cls: "monday-compact-item" });
+      const itemEl = listContainer.createDiv({ cls: "monday-compact-item" });
       const statusCol = columnsToShow.find((c) => c.type === "status");
       if (statusCol) {
         const colValue = item.column_values.find((cv) => cv.id === statusCol.id);
@@ -557,9 +557,9 @@ var MondayDashboardRenderer = class extends import_obsidian.MarkdownRenderChild 
           this.renderStatusBadge(itemEl, colValue, statusCol);
         }
       }
-      itemEl.createEl("span", { text: item.name, cls: "monday-compact-name" });
+      itemEl.createSpan({ text: item.name, cls: "monday-compact-name" });
       if (item.group) {
-        const groupBadge = itemEl.createEl("span", {
+        const groupBadge = itemEl.createSpan({
           text: item.group.title,
           cls: "monday-group-badge monday-group-badge-small"
         });
@@ -668,22 +668,23 @@ var MondayView = class extends import_obsidian.ItemView {
     container.empty();
     container.addClass("monday-sidebar");
     if (!this.plugin.settings.apiToken) {
-      const errorEl = container.createEl("div", { cls: "monday-sidebar-error" });
+      const errorEl = container.createDiv({ cls: "monday-sidebar-error" });
       errorEl.createEl("p", { text: "API token not configured." });
       const settingsBtn = errorEl.createEl("button", { text: "Open settings" });
       settingsBtn.addEventListener("click", () => {
-        this.app.setting.open();
-        this.app.setting.openTabById("monday-integration");
+        const settingApi = this.app.setting;
+        settingApi.open();
+        settingApi.openTabById("monday-integration");
       });
       return;
     }
-    const headerEl = container.createEl("div", { cls: "monday-sidebar-header" });
+    const headerEl = container.createDiv({ cls: "monday-sidebar-header" });
     headerEl.createEl("h4", { text: "Monday.com" });
     const refreshBtn = headerEl.createEl("button", { cls: "monday-sidebar-refresh" });
     refreshBtn.setText("\u21BB");
     refreshBtn.title = "Refresh boards";
     refreshBtn.addEventListener("click", () => void this.refreshBoards());
-    const selectorEl = container.createEl("div", { cls: "monday-board-selector" });
+    const selectorEl = container.createDiv({ cls: "monday-board-selector" });
     const selectEl = selectorEl.createEl("select", { cls: "monday-board-select" });
     const defaultOption = selectEl.createEl("option", { text: "Select a board...", value: "" });
     defaultOption.disabled = true;
@@ -707,8 +708,8 @@ var MondayView = class extends import_obsidian.ItemView {
       void this.loadAndRenderBoard(container);
       this.plugin.syncBoardSelection(boardId, "main");
     });
-    container.createEl("div", { cls: "monday-sidebar-filters" });
-    const itemsContainer = container.createEl("div", { cls: "monday-sidebar-items" });
+    container.createDiv({ cls: "monday-sidebar-filters" });
+    const itemsContainer = container.createDiv({ cls: "monday-sidebar-items" });
     if (this.selectedBoardId) {
       await this.loadAndRenderBoard(container);
     } else if (this.plugin.settings.cachedBoards.length === 0) {
@@ -723,7 +724,7 @@ var MondayView = class extends import_obsidian.ItemView {
       return;
     if (itemsContainer) {
       itemsContainer.empty();
-      itemsContainer.createEl("div", { text: "Loading items...", cls: "monday-sidebar-loading" });
+      itemsContainer.createDiv({ text: "Loading items...", cls: "monday-sidebar-loading" });
     }
     try {
       const isFirstLoad = !this.currentBoardData;
@@ -799,12 +800,12 @@ var MondayView = class extends import_obsidian.ItemView {
       }
     };
     if (statuses.size > 0) {
-      const statusSection = container.createEl("div", { cls: "monday-filter-section collapsed" });
-      const statusHeader = statusSection.createEl("div", { cls: "monday-filter-header" });
-      const statusTitleArea = statusHeader.createEl("div", { cls: "monday-filter-title-area" });
-      statusTitleArea.createEl("span", { cls: "monday-filter-chevron", text: "\u25B6" });
-      statusTitleArea.createEl("span", { text: "Status", cls: "monday-filter-title" });
-      const statusCount = statusTitleArea.createEl("span", { cls: "monday-filter-count" });
+      const statusSection = container.createDiv({ cls: "monday-filter-section collapsed" });
+      const statusHeader = statusSection.createDiv({ cls: "monday-filter-header" });
+      const statusTitleArea = statusHeader.createDiv({ cls: "monday-filter-title-area" });
+      statusTitleArea.createSpan({ cls: "monday-filter-chevron", text: "\u25B6" });
+      statusTitleArea.createSpan({ text: "Status", cls: "monday-filter-title" });
+      const statusCount = statusTitleArea.createSpan({ cls: "monday-filter-count" });
       const updateStatusCount = () => {
         const count = this.statusFilter.selected.size;
         statusCount.textContent = count > 0 ? `(${count} ${this.statusFilter.mode === "exclude" ? "hidden" : "selected"})` : "";
@@ -813,7 +814,7 @@ var MondayView = class extends import_obsidian.ItemView {
       statusTitleArea.addEventListener("click", () => {
         statusSection.classList.toggle("collapsed");
       });
-      const statusControls = statusHeader.createEl("div", { cls: "monday-filter-controls" });
+      const statusControls = statusHeader.createDiv({ cls: "monday-filter-controls" });
       const statusModeBtn = statusControls.createEl("button", {
         cls: `monday-filter-mode ${this.statusFilter.mode}`,
         text: this.statusFilter.mode === "include" ? "Show" : "Hide"
@@ -842,7 +843,7 @@ var MondayView = class extends import_obsidian.ItemView {
         updateStatusCount();
         refreshItems();
       });
-      const statusList = statusSection.createEl("div", { cls: "monday-filter-list" });
+      const statusList = statusSection.createDiv({ cls: "monday-filter-list" });
       for (const status of Array.from(statuses).sort()) {
         const label = statusList.createEl("label", { cls: "monday-filter-checkbox" });
         const checkbox = label.createEl("input", { type: "checkbox" });
@@ -856,16 +857,16 @@ var MondayView = class extends import_obsidian.ItemView {
           updateStatusCount();
           refreshItems();
         });
-        label.createEl("span", { text: status });
+        label.createSpan({ text: status });
       }
     }
     if (groups.size > 0) {
-      const groupSection = container.createEl("div", { cls: "monday-filter-section collapsed" });
-      const groupHeader = groupSection.createEl("div", { cls: "monday-filter-header" });
-      const groupTitleArea = groupHeader.createEl("div", { cls: "monday-filter-title-area" });
-      groupTitleArea.createEl("span", { cls: "monday-filter-chevron", text: "\u25B6" });
-      groupTitleArea.createEl("span", { text: "Group", cls: "monday-filter-title" });
-      const groupCount = groupTitleArea.createEl("span", { cls: "monday-filter-count" });
+      const groupSection = container.createDiv({ cls: "monday-filter-section collapsed" });
+      const groupHeader = groupSection.createDiv({ cls: "monday-filter-header" });
+      const groupTitleArea = groupHeader.createDiv({ cls: "monday-filter-title-area" });
+      groupTitleArea.createSpan({ cls: "monday-filter-chevron", text: "\u25B6" });
+      groupTitleArea.createSpan({ text: "Group", cls: "monday-filter-title" });
+      const groupCount = groupTitleArea.createSpan({ cls: "monday-filter-count" });
       const updateGroupCount = () => {
         const count = this.groupFilter.selected.size;
         groupCount.textContent = count > 0 ? `(${count} ${this.groupFilter.mode === "exclude" ? "hidden" : "selected"})` : "";
@@ -874,7 +875,7 @@ var MondayView = class extends import_obsidian.ItemView {
       groupTitleArea.addEventListener("click", () => {
         groupSection.classList.toggle("collapsed");
       });
-      const groupControls = groupHeader.createEl("div", { cls: "monday-filter-controls" });
+      const groupControls = groupHeader.createDiv({ cls: "monday-filter-controls" });
       const groupModeBtn = groupControls.createEl("button", {
         cls: `monday-filter-mode ${this.groupFilter.mode}`,
         text: this.groupFilter.mode === "include" ? "Show" : "Hide"
@@ -903,7 +904,7 @@ var MondayView = class extends import_obsidian.ItemView {
         updateGroupCount();
         refreshItems();
       });
-      const groupList = groupSection.createEl("div", { cls: "monday-filter-list" });
+      const groupList = groupSection.createDiv({ cls: "monday-filter-list" });
       for (const group of Array.from(groups).sort()) {
         const label = groupList.createEl("label", { cls: "monday-filter-checkbox" });
         const checkbox = label.createEl("input", { type: "checkbox" });
@@ -917,7 +918,7 @@ var MondayView = class extends import_obsidian.ItemView {
           updateGroupCount();
           refreshItems();
         });
-        label.createEl("span", { text: group });
+        label.createSpan({ text: group });
       }
     }
   }
@@ -968,20 +969,20 @@ var MondayView = class extends import_obsidian.ItemView {
       groupedItems.get(groupName).push(item);
     }
     for (const [groupName, items] of groupedItems) {
-      const groupEl = container.createEl("div", { cls: "monday-sidebar-group" });
-      const groupTitleEl = groupEl.createEl("div", { text: groupName, cls: "monday-sidebar-group-title" });
+      const groupEl = container.createDiv({ cls: "monday-sidebar-group" });
+      const groupTitleEl = groupEl.createDiv({ text: groupName, cls: "monday-sidebar-group-title" });
       const groupColors = ["#00c875", "#fdab3d", "#a25ddc", "#579bfc", "#e2445c"];
       const colorIndex = Array.from(groupedItems.keys()).indexOf(groupName) % groupColors.length;
       const hexColor = groupColors[colorIndex];
       groupTitleEl.style.borderLeftColor = hexColor;
       groupTitleEl.style.color = hexColor;
       for (const item of items) {
-        const itemWrapper = groupEl.createEl("div", { cls: "monday-sidebar-item-wrapper" });
-        const itemEl = itemWrapper.createEl("div", { cls: "monday-sidebar-item monday-sidebar-item-clickable" });
+        const itemWrapper = groupEl.createDiv({ cls: "monday-sidebar-item-wrapper" });
+        const itemEl = itemWrapper.createDiv({ cls: "monday-sidebar-item monday-sidebar-item-clickable" });
         const hasSubitems = item.subitems && item.subitems.length > 0;
         const isExpanded = this.expandedItems.has(item.id);
         if (hasSubitems) {
-          const expandBtn = itemEl.createEl("span", {
+          const expandBtn = itemEl.createSpan({
             cls: `monday-expand-btn ${isExpanded ? "expanded" : ""}`,
             text: isExpanded ? "\u25BC" : "\u25B6"
           });
@@ -998,17 +999,17 @@ var MondayView = class extends import_obsidian.ItemView {
             }
           });
         } else {
-          itemEl.createEl("span", {
+          itemEl.createSpan({
             cls: "monday-no-subtasks-icon",
             text: "\u25CB"
           });
         }
-        const nameEl = itemEl.createEl("span", { text: item.name, cls: "monday-sidebar-item-name" });
+        const nameEl = itemEl.createSpan({ text: item.name, cls: "monday-sidebar-item-name" });
         nameEl.addEventListener("click", (e) => {
           e.stopPropagation();
           void this.handleItemClick(item, boardData);
         });
-        const actionsEl = itemEl.createEl("div", { cls: "monday-item-actions" });
+        const actionsEl = itemEl.createDiv({ cls: "monday-item-actions" });
         const statusColumn = boardData.columns.find((c) => c.type === "status");
         const statusColValue = statusColumn ? item.column_values.find((cv) => cv.id === statusColumn.id) : null;
         const currentStatus = (statusColValue == null ? void 0 : statusColValue.text) || "";
@@ -1032,7 +1033,7 @@ var MondayView = class extends import_obsidian.ItemView {
           statusDropdown.addEventListener("click", (e) => e.stopPropagation());
         }
         if (currentStatus) {
-          const statusBadge = actionsEl.createEl("span", {
+          const statusBadge = actionsEl.createSpan({
             text: currentStatus,
             cls: "monday-sidebar-status"
           });
@@ -1050,7 +1051,7 @@ var MondayView = class extends import_obsidian.ItemView {
           this.showItemContextMenu(e, item, boardData);
         });
         if (hasSubitems && isExpanded && item.subitems) {
-          const subitemsContainer = itemWrapper.createEl("div", { cls: "monday-subitems-container" });
+          const subitemsContainer = itemWrapper.createDiv({ cls: "monday-subitems-container" });
           let filteredSubitemsCount = 0;
           for (const subitem of item.subitems) {
             if (this.statusFilter.selected.size > 0) {
@@ -1073,9 +1074,9 @@ var MondayView = class extends import_obsidian.ItemView {
                 continue;
             }
             filteredSubitemsCount++;
-            const subitemEl = subitemsContainer.createEl("div", { cls: "monday-subitem monday-subitem-clickable" });
-            subitemEl.createEl("span", { text: "\u2514\u2500", cls: "monday-subitem-prefix" });
-            const subitemNameEl = subitemEl.createEl("span", { text: subitem.name, cls: "monday-subitem-name" });
+            const subitemEl = subitemsContainer.createDiv({ cls: "monday-subitem monday-subitem-clickable" });
+            subitemEl.createSpan({ text: "\u2514\u2500", cls: "monday-subitem-prefix" });
+            const subitemNameEl = subitemEl.createSpan({ text: subitem.name, cls: "monday-subitem-name" });
             subitemNameEl.addEventListener("click", (e) => {
               e.stopPropagation();
               void this.handleSubitemClick(subitem, item, boardData);
@@ -1090,7 +1091,7 @@ var MondayView = class extends import_obsidian.ItemView {
                 try {
                   const valueObj = JSON.parse(cv.value);
                   if (typeof (valueObj == null ? void 0 : valueObj.index) === "number") {
-                    const statusBadge = subitemEl.createEl("span", {
+                    const statusBadge = subitemEl.createSpan({
                       text: cv.text,
                       cls: "monday-subitem-status"
                     });
@@ -1105,13 +1106,13 @@ var MondayView = class extends import_obsidian.ItemView {
             }
           }
           if (filteredSubitemsCount === 0) {
-            const hintEl = subitemsContainer.createEl("div", { cls: "monday-subitem monday-subitems-filtered-hint" });
-            hintEl.createEl("span", { text: "\u2514\u2500", cls: "monday-subitem-prefix" });
-            hintEl.createEl("span", { text: `(${item.subitems.length} subtasks hidden by filter)`, cls: "monday-subitem-hint-text" });
+            const hintEl = subitemsContainer.createDiv({ cls: "monday-subitem monday-subitems-filtered-hint" });
+            hintEl.createSpan({ text: "\u2514\u2500", cls: "monday-subitem-prefix" });
+            hintEl.createSpan({ text: `(${item.subitems.length} subtasks hidden by filter)`, cls: "monday-subitem-hint-text" });
           }
-          const addSubtaskBtn = subitemsContainer.createEl("div", { cls: "monday-add-subtask" });
-          addSubtaskBtn.createEl("span", { text: "\u2514\u2500", cls: "monday-subitem-prefix" });
-          addSubtaskBtn.createEl("span", { text: "+ add subtask", cls: "monday-add-subtask-text" });
+          const addSubtaskBtn = subitemsContainer.createDiv({ cls: "monday-add-subtask" });
+          addSubtaskBtn.createSpan({ text: "\u2514\u2500", cls: "monday-subitem-prefix" });
+          addSubtaskBtn.createSpan({ text: "+ add subtask", cls: "monday-add-subtask-text" });
           addSubtaskBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             new CreateSubtaskModal(this.app, item.name, (subtaskName) => {
@@ -1123,7 +1124,7 @@ var MondayView = class extends import_obsidian.ItemView {
         }
       }
     }
-    container.createEl("div", {
+    container.createDiv({
       text: `Showing ${filteredItems.length} of ${boardData.items.length} items`,
       cls: "monday-sidebar-item-count"
     });
@@ -1515,7 +1516,7 @@ var MondayView = class extends import_obsidian.ItemView {
       new import_obsidian.Notice(`Failed to change status: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   }
-  async changeSubitemStatus(subitem, parentItem, columnId, newStatus) {
+  async changeSubitemStatus(subitem, _parentItem, columnId, newStatus) {
     try {
       new import_obsidian.Notice(`Changing status to "${newStatus}"...`);
       await this.plugin.apiClient.changeSubitemStatus(subitem.id, columnId, newStatus);
@@ -1551,7 +1552,7 @@ var MondayView = class extends import_obsidian.ItemView {
       new import_obsidian.Notice(`Error: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   }
-  async assignPersonToItem(item, boardData, columnId, userIds) {
+  async assignPersonToItem(item, _boardData, columnId, userIds) {
     if (!this.selectedBoardId)
       return;
     try {
@@ -1672,9 +1673,9 @@ var MondayView = class extends import_obsidian.ItemView {
     if (this.personFilter) {
       const filtersContainer = container.querySelector(".monday-sidebar-filters");
       if (filtersContainer) {
-        const indicator = filtersContainer.createEl("div", { cls: "monday-person-filter-indicator" });
-        indicator.createEl("span", { text: `Filtered: ${this.personFilter}`, cls: "monday-person-filter-text" });
-        const clearBtn = indicator.createEl("span", { text: "\u2715", cls: "monday-person-filter-clear" });
+        const indicator = filtersContainer.createDiv({ cls: "monday-person-filter-indicator" });
+        indicator.createSpan({ text: `Filtered: ${this.personFilter}`, cls: "monday-person-filter-text" });
+        const clearBtn = indicator.createSpan({ text: "\u2715", cls: "monday-person-filter-clear" });
         clearBtn.addEventListener("click", () => {
           this.setPersonFilter(null);
         });
@@ -1710,22 +1711,23 @@ var MondayTeamView = class extends import_obsidian.ItemView {
     container.empty();
     container.addClass("monday-team-sidebar");
     if (!this.plugin.settings.apiToken) {
-      const errorEl = container.createEl("div", { cls: "monday-sidebar-error" });
+      const errorEl = container.createDiv({ cls: "monday-sidebar-error" });
       errorEl.createEl("p", { text: "API token not configured." });
       const settingsBtn = errorEl.createEl("button", { text: "Open settings" });
       settingsBtn.addEventListener("click", () => {
-        this.app.setting.open();
-        this.app.setting.openTabById("monday-integration");
+        const settingApi = this.app.setting;
+        settingApi.open();
+        settingApi.openTabById("monday-integration");
       });
       return;
     }
-    const headerEl = container.createEl("div", { cls: "monday-sidebar-header" });
+    const headerEl = container.createDiv({ cls: "monday-sidebar-header" });
     headerEl.createEl("h4", { text: "Team summary" });
     const refreshBtn = headerEl.createEl("button", { cls: "monday-sidebar-refresh" });
     refreshBtn.setText("\u21BB");
     refreshBtn.title = "Refresh";
     refreshBtn.addEventListener("click", () => void this.render());
-    const selectorEl = container.createEl("div", { cls: "monday-board-selector" });
+    const selectorEl = container.createDiv({ cls: "monday-board-selector" });
     const selectEl = selectorEl.createEl("select", { cls: "monday-board-select" });
     const defaultOption = selectEl.createEl("option", { text: "Select a board...", value: "" });
     defaultOption.disabled = true;
@@ -1745,7 +1747,7 @@ var MondayTeamView = class extends import_obsidian.ItemView {
       void this.loadAndRenderTeamStats(container);
       this.plugin.syncBoardSelection(boardId, "team");
     });
-    container.createEl("div", { cls: "monday-team-stats" });
+    container.createDiv({ cls: "monday-team-stats" });
     if (this.selectedBoardId) {
       await this.loadAndRenderTeamStats(container);
     } else if (this.plugin.settings.cachedBoards.length === 0) {
@@ -1758,9 +1760,9 @@ var MondayTeamView = class extends import_obsidian.ItemView {
     if (!statsContainer)
       return;
     statsContainer.empty();
-    const loadingEl = statsContainer.createEl("div", { cls: "monday-loading" });
-    loadingEl.createEl("div", { cls: "monday-spinner" });
-    loadingEl.createEl("span", { text: "Loading team data...", cls: "monday-loading-text" });
+    const loadingEl = statsContainer.createDiv({ cls: "monday-loading" });
+    loadingEl.createDiv({ cls: "monday-spinner" });
+    loadingEl.createSpan({ text: "Loading team data...", cls: "monday-loading-text" });
     try {
       const boardData = await this.plugin.apiClient.getBoardData(this.selectedBoardId, 500);
       statsContainer.empty();
@@ -1873,55 +1875,55 @@ var MondayTeamView = class extends import_obsidian.ItemView {
   }
   renderTeamStats(container, stats) {
     for (const member of stats) {
-      const memberEl = container.createEl("div", { cls: "monday-team-member monday-team-member-clickable" });
+      const memberEl = container.createDiv({ cls: "monday-team-member monday-team-member-clickable" });
       memberEl.title = `Click to filter by ${member.name}`;
       memberEl.addEventListener("click", () => {
         this.filterMainViewByPerson(member.name);
       });
-      memberEl.createEl("span", { text: member.name, cls: "monday-team-member-name" });
-      const badgesEl = memberEl.createEl("div", { cls: "monday-team-badges" });
+      memberEl.createSpan({ text: member.name, cls: "monday-team-member-name" });
+      const badgesEl = memberEl.createDiv({ cls: "monday-team-badges" });
       if (member.workingOnIt > 0) {
-        const workingBadge = badgesEl.createEl("span", {
+        const workingBadge = badgesEl.createSpan({
           text: String(member.workingOnIt),
           cls: "monday-team-badge monday-team-badge-working"
         });
         workingBadge.title = "Working on it";
       }
       if (member.done > 0) {
-        const doneBadge = badgesEl.createEl("span", {
+        const doneBadge = badgesEl.createSpan({
           text: String(member.done),
           cls: "monday-team-badge monday-team-badge-done"
         });
         doneBadge.title = "Done";
       }
       if (member.overdue > 0) {
-        const overdueBadge = badgesEl.createEl("span", {
+        const overdueBadge = badgesEl.createSpan({
           text: String(member.overdue),
           cls: "monday-team-badge monday-team-badge-overdue"
         });
         overdueBadge.title = "Overdue";
       }
       if (member.workingOnIt === 0 && member.done === 0 && member.overdue === 0) {
-        badgesEl.createEl("span", { text: "-", cls: "monday-team-no-tasks" });
+        badgesEl.createSpan({ text: "-", cls: "monday-team-no-tasks" });
       }
     }
     const totalWorking = stats.reduce((sum, s) => sum + s.workingOnIt, 0);
     const totalDone = stats.reduce((sum, s) => sum + s.done, 0);
     const totalOverdue = stats.reduce((sum, s) => sum + s.overdue, 0);
-    const summaryEl = container.createEl("div", { cls: "monday-team-summary" });
-    summaryEl.createEl("span", { text: "Total:", cls: "monday-team-summary-label" });
-    const summaryBadges = summaryEl.createEl("div", { cls: "monday-team-badges" });
-    const workingSummary = summaryBadges.createEl("span", {
+    const summaryEl = container.createDiv({ cls: "monday-team-summary" });
+    summaryEl.createSpan({ text: "Total:", cls: "monday-team-summary-label" });
+    const summaryBadges = summaryEl.createDiv({ cls: "monday-team-badges" });
+    const workingSummary = summaryBadges.createSpan({
       text: String(totalWorking),
       cls: "monday-team-badge monday-team-badge-working"
     });
     workingSummary.title = "Total working";
-    const doneSummary = summaryBadges.createEl("span", {
+    const doneSummary = summaryBadges.createSpan({
       text: String(totalDone),
       cls: "monday-team-badge monday-team-badge-done"
     });
     doneSummary.title = "Total done";
-    const overdueSummary = summaryBadges.createEl("span", {
+    const overdueSummary = summaryBadges.createSpan({
       text: String(totalOverdue),
       cls: "monday-team-badge monday-team-badge-overdue"
     });
@@ -1947,7 +1949,7 @@ var MondayTeamView = class extends import_obsidian.ItemView {
         const leaves = workspace.getLeavesOfType(MONDAY_VIEW_TYPE);
         if (leaves.length > 0) {
           const mondayView = leaves[0].view;
-          setTimeout(() => {
+          activeWindow.setTimeout(() => {
             mondayView.setPersonFilter(personName);
             new import_obsidian.Notice(`Filtered by: ${personName}`);
           }, 500);
@@ -1972,7 +1974,7 @@ var DuplicateNoteModal = class extends import_obsidian.Modal {
     contentEl.createEl("p", { text: `A note already exists at:` });
     contentEl.createEl("code", { text: this.notePath, cls: "monday-modal-path" });
     contentEl.createEl("p", { text: "What would you like to do?" });
-    const buttonContainer = contentEl.createEl("div", { cls: "monday-modal-buttons" });
+    const buttonContainer = contentEl.createDiv({ cls: "monday-modal-buttons" });
     const openBtn = buttonContainer.createEl("button", { text: "Open existing note", cls: "mod-cta" });
     openBtn.addEventListener("click", () => {
       this.callback("open");
@@ -2010,7 +2012,7 @@ var AddCommentModal = class extends import_obsidian.Modal {
       attr: { placeholder: "Enter your comment..." }
     });
     textArea.rows = 5;
-    const buttonContainer = contentEl.createEl("div", { cls: "monday-modal-buttons" });
+    const buttonContainer = contentEl.createDiv({ cls: "monday-modal-buttons" });
     const submitBtn = buttonContainer.createEl("button", { text: "Add comment", cls: "mod-cta" });
     submitBtn.addEventListener("click", () => {
       const comment = textArea.value.trim();
@@ -2026,7 +2028,7 @@ var AddCommentModal = class extends import_obsidian.Modal {
       this.callback(null);
       this.close();
     });
-    setTimeout(() => textArea.focus(), 50);
+    activeWindow.setTimeout(() => textArea.focus(), 50);
   }
   onClose() {
     const { contentEl } = this;
@@ -2052,7 +2054,7 @@ var CreateSubtaskModal = class extends import_obsidian.Modal {
         placeholder: "Enter subtask name..."
       }
     });
-    const buttonContainer = contentEl.createEl("div", { cls: "monday-modal-buttons" });
+    const buttonContainer = contentEl.createDiv({ cls: "monday-modal-buttons" });
     const submitBtn = buttonContainer.createEl("button", { text: "Create subtask", cls: "mod-cta" });
     submitBtn.addEventListener("click", () => {
       const subtaskName = inputEl.value.trim();
@@ -2077,7 +2079,7 @@ var CreateSubtaskModal = class extends import_obsidian.Modal {
         }
       }
     });
-    setTimeout(() => inputEl.focus(), 50);
+    activeWindow.setTimeout(() => inputEl.focus(), 50);
   }
   onClose() {
     const { contentEl } = this;
@@ -2106,15 +2108,15 @@ var AssignPersonModal = class extends import_obsidian.Modal {
         cls: "monday-assign-current"
       });
     }
-    const loadingEl = contentEl.createEl("div", { cls: "monday-loading" });
-    loadingEl.createEl("div", { cls: "monday-spinner" });
-    loadingEl.createEl("span", { text: "Loading users...", cls: "monday-loading-text" });
+    const loadingEl = contentEl.createDiv({ cls: "monday-loading" });
+    loadingEl.createDiv({ cls: "monday-spinner" });
+    loadingEl.createSpan({ text: "Loading users...", cls: "monday-loading-text" });
     try {
       this.users = await this.plugin.apiClient.getUsers();
       loadingEl.remove();
-      const userListEl = contentEl.createEl("div", { cls: "monday-user-list" });
+      const userListEl = contentEl.createDiv({ cls: "monday-user-list" });
       for (const user of this.users) {
-        const userEl = userListEl.createEl("div", { cls: "monday-user-item" });
+        const userEl = userListEl.createDiv({ cls: "monday-user-item" });
         const checkbox = userEl.createEl("input", {
           attr: { type: "checkbox", id: `user-${user.id}` }
         });
@@ -2134,9 +2136,9 @@ var AssignPersonModal = class extends import_obsidian.Modal {
           text: user.name,
           attr: { for: `user-${user.id}` }
         });
-        label.createEl("span", { text: ` (${user.email})`, cls: "monday-user-email" });
+        label.createSpan({ text: ` (${user.email})`, cls: "monday-user-email" });
       }
-      const buttonContainer = contentEl.createEl("div", { cls: "monday-modal-buttons" });
+      const buttonContainer = contentEl.createDiv({ cls: "monday-modal-buttons" });
       const clearBtn = buttonContainer.createEl("button", { text: "Clear all" });
       clearBtn.addEventListener("click", () => {
         this.selectedUserIds.clear();
@@ -2184,7 +2186,7 @@ var CreateTaskModal = class extends import_obsidian.Modal {
     contentEl.empty();
     contentEl.addClass("monday-create-task-modal");
     contentEl.createEl("h3", { text: "Create task" });
-    const nameContainer = contentEl.createEl("div", { cls: "monday-modal-field" });
+    const nameContainer = contentEl.createDiv({ cls: "monday-modal-field" });
     nameContainer.createEl("label", { text: "Task name" });
     this.taskNameInput = nameContainer.createEl("input", {
       type: "text",
@@ -2192,7 +2194,7 @@ var CreateTaskModal = class extends import_obsidian.Modal {
       value: this.initialText
     });
     this.taskNameInput.placeholder = "Enter task name...";
-    const boardContainer = contentEl.createEl("div", { cls: "monday-modal-field" });
+    const boardContainer = contentEl.createDiv({ cls: "monday-modal-field" });
     boardContainer.createEl("label", { text: "Board" });
     const boardDropdown = boardContainer.createEl("select", { cls: "monday-board-dropdown" });
     const defaultBoardOption = boardDropdown.createEl("option", { text: "Select a board...", value: "" });
@@ -2209,7 +2211,7 @@ var CreateTaskModal = class extends import_obsidian.Modal {
       this.selectedBoardId = boardDropdown.value;
       void this.loadGroups();
     });
-    const groupContainer = contentEl.createEl("div", { cls: "monday-modal-field" });
+    const groupContainer = contentEl.createDiv({ cls: "monday-modal-field" });
     groupContainer.createEl("label", { text: "Group" });
     this.groupDropdown = groupContainer.createEl("select", { cls: "monday-group-dropdown" });
     this.groupDropdown.disabled = true;
@@ -2223,14 +2225,14 @@ var CreateTaskModal = class extends import_obsidian.Modal {
     if (this.selectedBoardId) {
       await this.loadGroups();
     }
-    const buttonContainer = contentEl.createEl("div", { cls: "monday-modal-buttons" });
+    const buttonContainer = contentEl.createDiv({ cls: "monday-modal-buttons" });
     this.submitBtn = buttonContainer.createEl("button", { text: "Create task", cls: "mod-cta" });
     this.submitBtn.disabled = true;
     this.submitBtn.addEventListener("click", () => void this.createTask());
     const cancelBtn = buttonContainer.createEl("button", { text: "Cancel" });
     cancelBtn.addEventListener("click", () => this.close());
     this.taskNameInput.addEventListener("input", () => this.updateSubmitButton());
-    setTimeout(() => {
+    activeWindow.setTimeout(() => {
       var _a;
       return (_a = this.taskNameInput) == null ? void 0 : _a.focus();
     }, 50);
@@ -2394,7 +2396,7 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
         new import_obsidian.Notice("Connection failed. Check your API token.");
         button.setButtonText("Failed");
       }
-      setTimeout(() => {
+      activeWindow.setTimeout(() => {
         button.setButtonText("Test");
         button.setDisabled(false);
       }, 2e3);
@@ -2459,14 +2461,14 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
         await this.plugin.saveSettings();
       });
     });
-    const templateExamples = containerEl.createEl("div", { cls: "monday-template-examples" });
+    const templateExamples = containerEl.createDiv({ cls: "monday-template-examples" });
     templateExamples.createEl("p", { text: "Examples:", cls: "monday-template-title" });
     const exampleList = templateExamples.createEl("ul");
     exampleList.createEl("li", { text: '{name} \u2192 "Fix login bug"' });
     exampleList.createEl("li", { text: '{board}/{name} \u2192 "Project Alpha/Fix login bug"' });
     exampleList.createEl("li", { text: '{group} - {name} \u2192 "Sprint 1 - Fix login bug"' });
     new import_obsidian.Setting(containerEl).setName("Usage").setHeading();
-    const usageEl = containerEl.createEl("div", { cls: "monday-usage" });
+    const usageEl = containerEl.createDiv({ cls: "monday-usage" });
     usageEl.createEl("p", { text: "Add a dashboard to any note by inserting a code block:" });
     const codeExample = usageEl.createEl("pre");
     codeExample.createEl("code", {
@@ -2479,7 +2481,7 @@ var MondaySettingTab = class extends import_obsidian.PluginSettingTab {
     optionsList.createEl("li").setText("Use limit to set the maximum items shown, defaults to 25");
     optionsList.createEl("li").setText("Use columns to specify which column ID values to display");
     new import_obsidian.Setting(containerEl).setName("Support this plugin").setHeading();
-    const supportEl = containerEl.createEl("div", { cls: "monday-support" });
+    const supportEl = containerEl.createDiv({ cls: "monday-support" });
     supportEl.createEl("p", {
       text: "If this plugin helps you stay organised, consider buying me a coffee!"
     });
@@ -2597,7 +2599,7 @@ title: My Tasks
       }
     });
     this.registerEvent(
-      this.app.workspace.on("editor-menu", (menu, editor, view) => {
+      this.app.workspace.on("editor-menu", (menu, editor, _view) => {
         if (!this.settings.apiToken || this.settings.cachedBoards.length === 0) {
           return;
         }
@@ -2681,7 +2683,8 @@ title: My Tasks
     console.debug("Unloading Monday.com Integration plugin");
   }
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    const loaded = await this.loadData();
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
   }
   async saveSettings() {
     await this.saveData(this.settings);
